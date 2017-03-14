@@ -1,0 +1,230 @@
+<?xml version = "1.0" encoding="UTF-8" standalone="yes" ?>
+<Fluid2D> 
+
+  <parameters type="general">
+    <name value="modelname">
+      <type>str</type>
+      <default>advection</default>
+      <avail>advection,euler,boussinesq,quasigeostrophic</avail>
+      <doc>Type of model </doc>
+    </name>
+    <name value="expname">
+      <type>str</type>
+      <default>myexp</default>
+      <doc>Name of the experiment. Gives the prefix to the netcdf output files:
+      "advection_his.nc" contains the snapshots and 
+      "advection_diag.nc" contains integrals timeseries </doc>
+    </name>
+  </parameters>
+
+  <parameters type="numerics">
+    <name value="timestepping">
+      <type>str</type>
+      <default>RK3_SSP</default>
+      <avail>EF,LF, Heun, RK3_SSP,AB2,AB3,RK4_LS</avail>
+      <doc>Time scheme. </doc>
+    </name>
+    <name value="order">
+      <type>int,long</type>
+      <default>5</default>
+      <doc>Order of the advective flux discretization. Should be in [1,2,3,4,5]
+      1,3,5 are upwind fluxes, 2,4 are centered fluxes</doc>
+    </name>
+    <name value="nh">
+      <type>int,long</type>
+      <default>3</default>
+      <doc>Number of ghost points in the halo</doc>
+    </name>
+  </parameters>
+
+  <parameters type="time">
+    <name value="adaptable_dt">
+      <type>bool</type>
+      <default>True</default>
+      <doc>Set whether the time step is recomputed in realtime according to the cfl </doc>
+    </name>
+    <name value="dt">
+      <type>float</type>
+      <default>0.1</default>
+      <doc>model time step if adaptable_dt is False </doc>
+    </name>
+    <name value="cfl">
+      <type>float</type>
+      <default>0.5</default>
+      <doc>desired cfl that sets the time step in the case of 'adaptable_dt'. dt is computed in core/fluid2d.py </doc>
+    </name>
+    <name value="dtmax">
+      <type>float</type>
+      <default>5.</default>
+      <doc>Maximum time step of the model. It is import to control it
+      for accelerated flows starting from the rest state and/or for
+      flows where the stability is dominated by waves
+      propagation</doc>
+    </name>
+    <name value="rescaledtime">
+      <type>str</type>
+      <avail>none,enstrophy</avail>
+      <default>none</default>
+      <doc lang='en'>
+        Measure time with either the model time (none) or a rescaled time (enstrophy)
+      </doc>
+    </name>
+    <name value="ninterrestart">
+      <type>int,long</type>
+      <default>10</default>
+      <doc>Number of restart outputs during the integration. </doc>
+    </name>
+  </parameters>
+
+  <parameters type="domain and resolution">
+    <name value="nx">
+      <type>int,long</type>
+      <default>128</default>
+      <doc>Number of gridpoints in x direction in the global grid. </doc>
+    </name>
+    <name value="ny">
+      <type>int,long</type>
+      <default>128</default>
+      <doc>Number of gridpoints in y direction in the global grid. </doc>
+    </name>
+    <name value="Lx">
+      <type>float,int,long</type>
+      <default>1.</default>
+      <doc>Domain length along x</doc>
+    </name>
+    <name value="Ly">
+      <type>float,int,long</type>
+      <default>1.</default>
+      <doc>Domain length along y</doc>
+    </name>
+    <name value="geometry">
+      <type>str</type>
+      <avail>disc, perio, square, ychannel, xchannel</avail>
+      <default>disc</default>
+      <doc lang='en'>
+        Domain shape. It offers a bunch of predefined masks. You may change it in your script.
+      </doc>
+    </name>
+    <name value="isisland">
+      <type>bool</type>
+      <default>False</default>
+      <doc lang='en'>
+        Activate to impose non-zero streamfunction along certain boundaries
+      </doc>
+    </name>
+    <name value="mpi">
+      <type>int,long</type>
+      <avail>0,1</avail>
+      <default>0</default>
+      <doc lang='en'>
+        whether mpi is activated or not
+      </doc>
+    </name>
+    <name value="myrank">
+      <type>int,long</type>
+      <default>0</default>
+      <doc lang='en'>
+        rank of the process, working on the rank-th subdomain
+      </doc>
+    </name>
+    <name value="npx">
+      <type>int,long</type>
+      <default>1</default>
+      <doc lang='en'>
+        number of subdomains (cores) in x
+      </doc>
+    </name>
+    <name value="npy">
+      <type>int,long</type>
+      <default>1</default>
+      <doc lang='en'>
+        number of subdomains (cores) in y
+      </doc>
+    </name>
+  </parameters>
+
+
+  <parameters type="plotting options">
+    <name value="plot_interactive">
+      <type>bool</type>
+      <default>True</default>
+      <doc>Set on the interactive plotting. Turn it off to speed up the computation</doc>
+    </name>
+    <name value="freq_plot">
+      <type>int,long</type>
+      <default>1</default>
+      <doc>number of iterations between two plotting refresh</doc>
+    </name>
+    <name value="generate_mp4">
+      <type>bool</type>
+      <default>False</default>
+      <doc>generate a mp4 video file on the fly</doc>
+    </name>
+    <name value="colorscheme">
+      <type>str</type>
+      <default>minmax</default>
+      <avail>minmax,symmetric,imposed</avail>
+      <doc>Method to adjust the colorscale</doc>
+    </name>
+    <name value="plotting_module">
+      <type>str</type>
+      <default>plotting</default>
+      <avail>anything </avail>
+      <doc>give the name of your plotting module (python script). It should look like core/plotting.py</doc>
+    </name>
+  </parameters>
+
+  <parameters type="output">
+    <name value="var_to_save">
+      <type>str</type>
+      <default>vorticity</default>
+      <doc>List of variables names that we want to output in the history file. The variables names have to be consistent with the model</doc>
+    </name>
+    <name value="nprint">
+      <type>int,long</type>
+      <default>20</default>
+      <doc>Numer of time steps between two prints</doc>
+    </name>
+    <name value="freq_his">
+      <type>float</type>
+      <default>1.</default>
+      <doc>Interval of time between two output in the history file</doc>
+    </name>
+    <name value="freq_diag">
+      <type>float</type>
+      <default>1.</default>
+      <doc>Interval of time between two output in the diag file</doc>
+    </name>
+  </parameters>
+
+  <parameters type="physics">
+    <name value="diffusion">
+      <type>bool</type>
+      <default>False</default>
+      <doc>Add or not a diffusion term on tracer</doc>
+    </name>
+    <name value="customized">
+      <type>bool</type>
+      <default>False</default>
+      <doc>Customize the time step. If activated you should provide
+      the name of the custom module</doc>
+    </name>
+    <name value="Kdiff">
+      <type>float</type>
+      <default>0.</default>
+      <doc>Diffusion coefficient. Has to be set manually. It should depends on the resolution.</doc>
+    </name>
+    <name value="noslip">
+      <type>bool</type>
+      <default>False</default>
+      <doc>Add a noslip condition along the boundaries</doc>
+    </name>
+    <name value="enforce_momentum">
+      <type>bool</type>
+      <default>False</default>
+      <doc>Enforce the global momentum conservation in closed domain in unforced case</doc>
+    </name>
+  </parameters>
+
+
+</Fluid2D>
