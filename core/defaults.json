@@ -1,0 +1,317 @@
+{
+    "general": {
+        "modelname": {
+            "type": "str",
+            "default": "advection",
+            "avail": [
+                "advection",
+                "euler",
+                "boussinesq",
+                "quasigeostrophic",
+                "thermalwind"
+            ],
+            "doc": "Type of model equations"
+        },
+        "expname": {
+            "type": "str",
+            "default": "myexp",
+            "doc": "Name of the experiment. Gives the prefix to the netcdf output files:  \"*_his.nc\" which contains the history (2D snapshots) and \"*_diag.nc\" which contains integrals timeseries (energy, enstrophy, vorticity etc.)"
+        }
+    },
+    "numerics": {
+        "timestepping": {
+            "type": "str",
+            "default": "RK3_SSP",
+            "avail": [
+                "EF",
+                "LF",
+                "Heun",
+                "RK3_SSP",
+                "AB2",
+                "AB3",
+                "LFAM3",
+                "RK4_LS"
+            ],
+            "doc": "Time scheme."
+        },
+        "order": {
+            "type": "int",
+            "default": 5,
+            "doc": "Order of the advective flux discretization. Should be in [1,2,3,4,5]. 1, 3, 5 are upwind fluxes ; 2, 4 are centered fluxes. Upwind fluxes naturally provides enough dissipation to the code. Centered fluxes requiere to activate the diffusion/viscosity to smooth out the noise at the grid scale."
+        },
+        "aparab": {
+            "type": "float",
+            "default": 0.05,
+            "doc": "Coefficient used to define the parabolic flux splitting"
+        },
+        "flux_splitting_method": {
+            "type": "str",
+            "default": "parabolic",
+            "avail": [
+                "minmax",
+                "parabolic"
+            ],
+            "doc": "Advective Flux Splitting Method. 'minmax' is the usual basic one, 'parabolic' is a regularized one that provides better solutions"
+        },
+        "nh": {
+            "type": "int",
+            "default": 3,
+            "doc": "Number of ghost points in the halo"
+        }
+    },
+    "time": {
+        "adaptable_dt": {
+            "type": "bool",
+            "default": true,
+            "doc": "If True: the time step is recomputed in realtime according to param.cfl. If False: the model uses the constant param.dt time step."
+        },
+        "dt": {
+            "type": "float",
+            "default": 0.1,
+            "doc": "Model time step if param.adaptable_dt == False"
+        },
+        "cfl": {
+            "type": "float",
+            "default": 0.5,
+            "doc": "Desired cfl that sets the time step in the case param.adaptable_dt == True. dt is computed in core/fluid2d.py using dt = cfl*dx/max|u|."
+        },
+        "dtmax": {
+            "type": "float",
+            "default": 5.0,
+            "doc": "Maximum time step of the model. It is import to control it for accelerated flows starting from the rest state or for flows where the stability is dominated by waves propagation (internal waves or Rossby waves)"
+        },
+        "rescaledtime": {
+            "type": "str",
+            "avail": [
+                "none",
+                "enstrophy"
+            ],
+            "default": "none",
+            "doc": "Measure time with either the model time (none) or a rescaled time (enstrophy)"
+        },
+        "ninterrestart": {
+            "type": "int",
+            "default": 1,
+            "doc": "Number of restart outputs during the integration."
+        }
+    },
+    "domain and resolution": {
+        "nx": {
+            "type": "int",
+            "default": 128,
+            "doc": "Number of gridpoints in x direction in the global grid. It has to be a power of 2."
+        },
+        "ny": {
+            "type": "int",
+            "default": 128,
+            "doc": "Number of gridpoints in y direction in the global grid. It has to be a power of 2."
+        },
+        "Lx": {
+            "type": "float",
+            "default": 1.0,
+            "doc": "Domain length along x. x-axis ranges from 0 to Lx."
+        },
+        "Ly": {
+            "type": "float",
+            "default": 1.0,
+            "doc": "Domain length along y. y-axis ranges from 0 to Ly."
+        },
+        "geometry": {
+            "type": "str",
+            "avail": [
+                "disc",
+                "perio",
+                "square",
+                "ychannel",
+                "xchannel"
+            ],
+            "default": "disc",
+            "doc": "Domain shape. It offers a list of predefined masks. You may change the mask in your script. See for instance experiments/Vortex/vortex.py for an example."
+        },
+        "isisland": {
+            "type": "bool",
+            "default": false,
+            "doc": "Activate to impose non-zero streamfunction along certain boundaries"
+        },
+        "mpi": {
+            "type": "int",
+            "default": 0,
+            "doc": "Whether mpi is activated or not. If npx*npy>1 the code should be executed with mpirun -np #cores python myexp.py, where #cores=npx*npy."
+        },
+        "myrank": {
+            "type": "int",
+            "default": 0,
+            "doc": "MPI rank of the process, working on the rank-th subdomain. When npx*npy == 1, myrank is zero."
+        },
+        "npx": {
+            "type": "int",
+            "default": 1,
+            "doc": "Number of subdomains (cores) in x. It has to be a power of 2."
+        },
+        "npy": {
+            "type": "int",
+            "default": 1,
+            "doc": "Number of subdomains (cores) in y. It has to be a power of 2."
+        }
+    },
+    "plotting options": {
+        "plot_interactive": {
+            "type": "bool",
+            "default": true,
+            "doc": "Set on the interactive plotting. Turn it off to speed up the computation"
+        },
+        "imshow_interpolation": {
+            "type": "str",
+            "default": "nearest",
+            "avail": [
+                "nearest",
+                "bilinear"
+            ],
+            "doc": "Interpolation scheme for the imshow rendering"
+        },
+        "plot_psi": {
+            "type": "bool",
+            "default": false,
+            "doc": "Add iso-contours of psi (streamfunction) during the interactive plot"
+        },
+        "plot_ua": {
+            "type": "bool",
+            "default": false,
+            "doc": "Add quiver of the ageostrophic velocity ('qg' model only)"
+        },
+        "plot_pvback": {
+            "type": "bool",
+            "default": false,
+            "doc": "Add iso-contours of pvback, the background pv ('qg' model)"
+        },
+        "freq_plot": {
+            "type": "int",
+            "default": 10,
+            "doc": "Number of iterations between two plotting update. This sets the smoothness of the animation. Refreshing too often will slow down the computation."
+        },
+        "generate_mp4": {
+            "type": "bool",
+            "default": false,
+            "doc": "Generate a mp4 video file on the fly. Need to have 'avconv' or 'ffmpeg' installed."
+        },
+        "colorscheme": {
+            "type": "str",
+            "default": "minmax",
+            "avail": [
+                "minmax",
+                "symmetric",
+                "imposed"
+            ],
+            "doc": "Method to adjust the colorscale. 'minmax': time varying colorscale following the min and max of the field ; 'symmetric': same as 'minmax' but with the additional constraint that the scale is centered around zero ; 'imposed': the colorscale is imposed in param.cax"
+        },
+        "cmap": {
+            "type": "str",
+            "default": "RdBu_r",
+            "doc": "set the colormap, needs to be in the pyplot list, see: matplotlib.pyplot.cm.cmap_d.keys()"
+        },
+        "plotting_module": {
+            "type": "str",
+            "default": "plotting",
+            "doc": "give the name of your plotting module (python script). It should look like core/plotting.py"
+        }
+    },
+    "output": {
+        "datadir": {
+            "type": "str",
+            "default": "~/data/fluid2d",
+            "doc": "Folder where to store the outputs. Typically a storage disk, not the $HOME. The default is $HOME/data/fluid2d"
+        },
+        "expdir": {
+            "type": "str",
+            "default": "none",
+            "doc": "Folder where the experiment outputs are saved. This folder is automatically created by the code."
+        },
+        "var_to_save": {
+            "type": "str",
+            "default": "vorticity",
+            "doc": "List of variables names that we want to output in the history file. The variables names have to be consistent with the model"
+        },
+        "list_diag": {
+            "type": "str",
+            "default": "all",
+            "doc": "List of variables names that we want to output in the diagnostic file. The variables names have to be consistent with the model. If 'all', store them all."
+        },
+        "nprint": {
+            "type": "int",
+            "default": 20,
+            "doc": "Number of time steps between two prints of iteration / time step"
+        },
+        "freq_his": {
+            "type": "float",
+            "default": 1.0,
+            "doc": "Interval of time between two outputs in the history file"
+        },
+        "exacthistime": {
+            "type": "bool",
+            "default": true,
+            "doc": "Adjust the time step so that history I/O is done at exact desired time. This may hurt the smoothness of the run. In particular the dissipation of enstrophy and energy may have little jumps."
+        },
+        "freq_diag": {
+            "type": "float",
+            "default": 1.0,
+            "doc": "Interval of time between two output in the diag file"
+        }
+    },
+    "physics": {
+        "hydroepsilon": {
+            "type": "float",
+            "default": 1.0,
+            "doc": "Parameter controlling the transition between hydro/non-hydro. 1 = non-hydrostatic, 0 = strictly hydrostatic (unstable), minimal value 0.2. Only works with 'boussinesq' and 'thermalwind' models."
+        },
+        "diffusion": {
+            "type": "bool",
+            "default": false,
+            "doc": "Add or not a diffusion term on tracer. Diffusion is applied only on 'tracer' fields, i.e. the ones that are advected. If True, the value for the diffusion coefficient is set in param.Kdiff"
+        },
+        "customized": {
+            "type": "bool",
+            "default": false,
+            "doc": "Customize the time step. If activated you should provide the name of the custom module"
+        },
+        "Kdiff": {
+            "type": "float",
+            "default": 0.0,
+            "doc": "Diffusion coefficient. Has to be set manually. It should depends on the resolution. The code allows to have different diffusion coefficients  for each tracer. The diffusion term is a Laplacian."
+        },
+        "noslip": {
+            "type": "bool",
+            "default": false,
+            "doc": "Add a noslip condition along the boundaries"
+        },
+        "ageostrophic": {
+            "type": "bool",
+            "default": false,
+            "doc": "Activate the diagnostic of the ageostrophic velocity ('qg' model)"
+        },
+        "bottom_torque": {
+            "type": "bool",
+            "default": false,
+            "doc": "Activate the diagnostic of the bottom torque ('qg' model)"
+        },
+        "forcing": {
+            "type": "bool",
+            "default": false,
+            "doc": "Activate a forcing. Needs to provide the name of the forcing routine"
+        },
+        "decay": {
+            "type": "bool",
+            "default": true,
+            "doc": "If True, warns when kinetic energy increases between two time steps (only for Euler model)"
+        },
+        "enforce_momentum": {
+            "type": "bool",
+            "default": false,
+            "doc": "Enforce the global momentum conservation in closed domain in unforced case ('euler' model only)"
+        },
+        "spongelayer": {
+            "type": "bool",
+            "default": false,
+            "doc": "Add a sponge layer, works only for the von karman experiment"
+        }
+    }
+}

@@ -1,78 +1,126 @@
-import xml.etree.ElementTree as ET
+import json
 import os.path as path
+import sys
+import getopt
+
 
 class Param(object):
-    """A python way to implement a Fortran namelist.
+    """class to set up the default parameters value of the model
 
-    Parameters are read from a xml file
+    the default parameters are stored in a json file along with
+    their definition
 
-    The xml file contains defaults value and list of available values
-    for parameters who take only a limited set of values
+    launch the code with the -h to get the help on all the model
+    parameters, e.g.
+
+    python vortex.py -h
+
     """
-    def __init__(self,xmlfile='default.xml',verbose=True):
+
+    def __init__(self, defaultfile):
+        """defaultfile is a sequel, it's no longer used the default file is
+        systematically the defaults.json located in the fluid2d/core
+
+        """
+
         import grid
         d = path.dirname(grid.__file__)
-        #print('fluid2d main core is in %s'%d)
-        if xmlfile=='default.xml':
-            self.xmlfile = d+'/default.xml'
-        else:
-            self.xmlfile = xmlfile
-        self.verbose = verbose
-        self.set_attr_from_xml()
-        
-    def __str__(self):
-        print('Parameters are:')
-        for p in self.list_param:
-            print(' - %s = %s'%(p,str(getattr(self,p))))
-        print('default parameters come from: %s'%self.xmlfile)
-        return ''
-            
-    def set_attr_from_xml(self):
-        """ read the xml and assign default value to the attributes """
-        tree = ET.parse(self.xmlfile)
-        root = tree.getroot()
-        self.list_param=[]
-        for p in root.iter('name'):
-            name=p.attrib['value']
-            typ = p.find('type').text.split(',')[0]    
-            tex = p.find('default').text
-            val = eval("%s('%s')"%(typ,tex))    
-            if(typ=='bool'):
-                val = tex in ['True','true']
-            setattr(self,name,val)
-            self.list_param.append(name)
+        jasonfile = d+'/defaults.json'
 
-    def check(self):
-        """ check whether the values are within the available values """
-        tree = ET.parse(self.xmlfile)
-        root = tree.getroot()
-        generalok = True
-        for p in root.iter('name'):
-            name=p.attrib['value']
-            typ = p.find('type').text.split(',')[0]    
-            avail = p.find('avail')
-            if hasattr(avail,'text'):
-                list_avail = avail.text.replace(' ','').split(',')
-                val = getattr(self,name)
-                ok = (val in list_avail)
-                if ok:
-                    if self.verbose:
-                        print('value of %s is ok'%name)
-                else:
-                    generalok = False
-                    if self.verbose:
-                        print('value of %s is wrong, should be one of [%s]'%(name,avail.text))
-        return generalok                
-        
-    def copy(self,obj,list_param):
+        with open(jasonfile) as f:
+            namelist = json.load(f)
+
+        self.set_parameters(namelist)
+
+        opts, args = getopt.getopt(str(sys.argv[1:]), 'h:v', [''])
+        if '-h' in args:
+            self.manall()
+            sys.exit()
+
+        if '-v' in args:
+            self.print_param = True
+        else:
+            self.print_param = False
+
+    def set_parameters(self, namelist):
+        avail = {}
+        doc = {}
+        for d in namelist.keys():
+            dd = namelist[d]
+            for name in dd.keys():
+                val = dd[name]['default']
+                # print(name, val)
+                setattr(self, name, val)
+                if 'avail' in dd[name]:
+                    avail[name] = dd[name]['avail']
+                if 'doc' in dd[name]:
+                    doc[name] = dd[name]['doc']
+        self.avail = avail
+        self.doc = doc
+
+    def man(self, name):
+        if name in self.doc:
+            helpstr = self.doc[name]
+            if name in self.avail:
+                availstr = ', '.join([str(l) for l in self.avail[name]])
+                helpstr += ' / available values = ['+availstr+']'
+        else:
+            helpstr = 'no manual for this parameter'
+
+        name = '\033[0;32;40m' + name + '\033[0m'
+        print('  - "%s" : %s\n' % (name, helpstr))
+
+    def manall(self):
+        ps = self.listall()
+        for p in ps:
+            self.man(p)
+
+    def checkall(self):
+        for p, avail in self.avail.items():
+            if getattr(self, p) in avail:
+                # the parameter 'p' is well set
+                pass
+            else:
+                msg = 'parameter "%s" should in ' % p
+                msg += str(avail)
+                raise ValueError(msg)
+
+    def listall(self):
+        """ return the list of all the parameters"""
+        ps = [d for d in self.__dict__ if not(d in ['avail', 'doc'])]
+        return ps
+
+    def printvalues(self):
+        """ print the value of each parameter"""
+        for d in self.__dict__.keys():
+            if not(d in ['avail', 'doc']):
+                print('%20s :' % d, getattr(self, d))
+
+    def copy(self, obj, list_param):
         """ copy attributes listed in list_param to obj
-        
+
         On output it returns missing attributes
         """
-        missing=[]
+        missing = []
         for k in list_param:
-            if hasattr(self,k):
-                setattr(obj,k,getattr(self,k))
+            if hasattr(self, k):
+                setattr(obj, k, getattr(self, k))
             else:
                 missing.append(k)
         return missing
+
+
+if __name__ == "__main__":
+    param = Param()
+    print('liste of parameters')
+    print(param.listall())
+
+    # to have the documentation on one particular parameter
+    param.man('beta')
+
+    # to get the documentation on all the parameters
+    param.manall()
+
+    # to check that all parameters that should a value taken from a list
+    # have an acceptable value
+    param.checkall()

@@ -1,5 +1,5 @@
 !----------------------------------------
-      subroutine computeorthogradient(msk,psi,dx,nh,n,m,u,v)
+      subroutine computeorthogradient(msk,psi,dx,dy,nh,n,m,u,v)
 
 ! compute u,v= (-dpsi/dy,dpsi/dx)
 !
@@ -9,20 +9,21 @@
       integer,intent(in):: n,m,nh
       integer*1,dimension(m,n) :: msk
       real*8,dimension(m,n) :: psi,u,v
-      real*8::dx
+      real*8::dx,dy
 
 !f2py intent(inplace)::psi,msk,u,v
 
-      real*8::zdx
+      real*8::zdx,zdy
       integer:: i,j
       integer*1:: mm
 
       zdx = 1./dx
+      zdy = 1./dy
       do j=2,m-1!nh-1,m-nh+1
          do i=2,n-1!nh-1,n-nh+1
             mm=msk(j,i)+msk(j,i+1)
             if(mm.eq.2)then
-               u(j,i) = zdx*(psi(j-1,i)-psi(j,i))
+               u(j,i) = zdy*(psi(j-1,i)-psi(j,i))
             else
                u(j,i) = 0.
             endif
@@ -182,7 +183,7 @@
       end subroutine 
 
 !----------------------------------------
-      subroutine computenoslipsourceterm(msk,x,y,total,dx,nh,m,n)
+      subroutine computenoslipsourceterm(msk,x,y,total,dx,dy,nh,m,n)
 
 ! compute y=b-A*x
 
@@ -192,7 +193,7 @@
       integer*1,dimension(m,n) :: msk
       real*8,dimension(m,n) :: x
       real*8,dimension(m,n) :: y
-      real*8::dx,total
+      real*8::dx,dy,total
 
 !f2py intent(inplace)::msk,x
 !f2py intent(inplace)::y
@@ -203,7 +204,7 @@
       integer*1::msku,mskv
       real*8::cff,u,v
 
-      cff=1./(2*dx*dx)
+      cff=1./(2*dx*dy)
 
 !      y(:,:)=0.
       total=0.
@@ -322,15 +323,18 @@
             mr = max(one,msk(j,i+1)+ msk(j,i))
             dbr=(buoy(j,i+1)*msk(j,i+1)+buoy(j,i)*msk(j,i))/mr
 
-!            mm=(ml+mr)
+            mm=(ml+mr)
 !            if(mm.gt.0) then
 !               z = (dbr-dbl)*(coef)
 !            else
 !               z=0.
 !            endif
-            domega(j,i) = domega(j,i) + (dbr-dbl)*(coef)*msk(j,i)
+            if (mm.eq.4) then
+!                 domega(j,i) = domega(j,i) + (dbr-dbl)*(coef)*msk(j,i)
+                 domega(j,i) = domega(j,i) + (buoy(j,i+1)-buoy(j,i-1))*(coef)*msk(j,i)
+            endif
 !            sum=sum+z
-!            if(mm.gt.0) domega(j,i) =  (dbr+dbl)*(coef/mm)
+!            if(mm.gt.0) domega(j,i) =  domega(j,i)+(dbr-dbl)*(coef/mm)
             ml=mr
             dbl=dbr
 !            ii=ii+1

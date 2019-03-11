@@ -8,7 +8,7 @@
     integer,intent(in):: n,m,nh,method,order
     integer*1,dimension(m,n) :: msk
     real*8,dimension(m,n) :: x,y,u,v
-    real*8,dimension(3):: cst
+    real*8,dimension(5):: cst
 
 !f2py intent(inplace)::msk,x,y,u,v
 
@@ -18,7 +18,7 @@
     integer*1:: mx5,mx3,mx2,my2
     integer*1,dimension(n)::my5,my3
 
-    real*8::zdx,dx,a,logcosh,umax,Uparab,u1,aa,bb
+    real*8::zdx,dx,zdy,dy,a,logcosh,umax,Uparab,u1,aa,bb,aparab
 
     real*8::KK,UU,up,um,qp,qm
 
@@ -44,15 +44,18 @@
     c3 =  2./6.
 
     dx      = cst(1)
-    logcosh = cst(2)
-    umax    = cst(3)
+    dy      = cst(2)
+    logcosh = cst(3)
+    umax    = cst(4)
+    aparab  = cst(5)
 
     zdx = 1./dx
+    zdy = 1./dy
     !
     a   = logcosh/umax
     KK   = ( umax - log(cosh(umax * a))/a) * 0.5
     !
-    u1 = 0.05 * umax
+    u1 = aparab * umax
     aa = 1./(2.*u1)
     bb = u1*0.5
     !
@@ -146,7 +149,7 @@
        if (j.gt.nh)then
           do i=nh+1,n-nh
              ! divergence of the flux
-             y(j,i) = -zdx * ( fx(i)-fx(i-1) +fy(i)-fym(i) )
+             y(j,i) = -zdx*(fx(i)-fx(i-1))-zdy*(fy(i)-fym(i))
              !swap
              fym(i)=fy(i)
           enddo
@@ -172,7 +175,7 @@
     integer,intent(in):: n,m,nh,method,order
     integer*1,dimension(m,n) :: msk
     real*8,dimension(m,n) :: x,y,u,v
-    real*8,dimension(3):: cst
+    real*8,dimension(5):: cst
 
 !f2py intent(inplace)::msk,x,y,u,v
 
@@ -182,7 +185,7 @@
     integer*1:: mx4,mx2
     integer*1,dimension(n)::my4,my2
 
-    real*8::zdx,dx,a,logcosh,umax,Uparab,u1,aa,bb
+    real*8::zdx,dx,zdy,dy,a,logcosh,umax,Uparab,u1,aa,bb
 
     real*8::KK,UU,up,um,qp,qm
 
@@ -203,10 +206,10 @@
     c1 = 1./2.
 
     dx      = cst(1)
-    logcosh = cst(2)
-    umax    = cst(3)
+    dy      = cst(2)
 
     zdx = 1./dx
+    zdy = 1./dy
     !
     do i=nh,n-nh
        my4(i)=msk(2,i)+msk(3,i)+msk(4,i)+msk(5,i)
@@ -250,7 +253,7 @@
        if (j.gt.nh)then
           do i=nh+1,n-nh
              ! divergence of the flux
-             y(j,i) = -zdx * ( fx(i)-fx(i-1) +fy(i)-fym(i) )
+             y(j,i) = -zdx*(fx(i)-fx(i-1))-zdy*(fy(i)-fym(i))
              !swap
              fym(i)=fy(i)
           enddo

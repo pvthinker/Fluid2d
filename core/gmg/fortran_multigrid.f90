@@ -26,7 +26,7 @@
       real*8,dimension(3,n) :: yo
 !      real*8,dimension(n,2) :: bo
       integer:: i,j,k,jm,km,ko,kp,lm,lo,lp,jo,jmo,jmm,im,ip,jp
-      real*8::w
+!      real*8::w
       integer*1::s
       
       real*8::c1,c2,c3
@@ -154,7 +154,7 @@
       real*8,dimension(3,n) :: yo
 !      real*8,dimension(n,2) :: bo
       integer:: i,j,k,jm,km,ko,kp,lm,lo,lp,jo,jmo,jmm,im,ip,jp
-      real*8::w
+!      real*8::w
       integer*1::s
       
       real*8::c1,c2,c3
@@ -212,6 +212,111 @@
       end subroutine
 
 !----------------------------------------
+      subroutine smoothtridiag(msk,A,x,b,m,n)
+        
+! compute 
+!        y=V^{-1}*(b-H*x)
+! where      
+! Laplacian = V+H
+! V is the vertical part (including the diagonal term)
+!
+
+      implicit none
+
+      integer,intent(in):: n,m
+      integer*1,dimension(m,n) :: msk
+      real*8,dimension(m,n,5) :: A
+!      real*8,dimension(m,n) :: D
+      real*8,dimension(m,n) :: b
+      real*8,dimension(m,n) :: x
+
+!f2py intent(inplace)::msk,b
+!f2py intent(inplace)::x
+
+      real*8,dimension(m) :: y,d,ud,rhs
+
+      integer:: i,j,im,ip,jm,jp
+
+      do i=2,n-1
+         ip=i+1
+         im=i-1
+         ! here we assume a halo width = 3
+         ! since psi(j,i) is on the (top right) corner
+         ! of cell (j,i)
+         ! the bottom bry is x(4,:)=0
+         ! the top    bry is x(m-3,:)=0
+         ! the tridiagonal inversion is done
+         ! on interior points 4 <= j <= m-4
+         ! watch out Fortran starts with index 1...
+         ! whereas Python starts with index 0
+         if(msk(4,i).ne.0) then
+         y(:)=0.
+         do j=4,m-4
+            jm=j-1
+            jp=j+1
+
+! y = b - A*x reads
+!!$            y(j,i)=b(j,i)
+!!$     $           -A(j,i,1)*x(j-1,i-1)
+!!$     $           -A(j,i,2)*x(j-1,i  )
+!!$     $           -A(j,i,3)*x(j-1,i+1)
+!!$     $           -A(j,i,4)*x(j,i-1)
+!!$     $           -A(j,i,5)*x(j,i  )
+!!$     $           -A(j,i+1,4)*x(j,i+1)
+!!$     $           -A(j+1,i-1,3)*x(j+1,i-1)
+!!$     $           -A(j+1,i,2)*x(j+1,i  )
+!!$     $           -A(j+1,i+1,1)*x(j+1,i+1)
+            
+            rhs(j)= b(j,i)
+     $       -A(j,i,1)*x(jm,im)
+     $       -A(j,i,3)*x(jm,ip)
+     $       -A(j,i,4)*x(j,im)
+     $       -A(j,ip,4)*x(j,ip)
+     $       -A(jp,im,3)*x(jp,im)
+     $       -A(jp,ip,1)*x(jp,ip)
+     
+            d(j) = A(j,i,5)
+            ud(j) = A(jp,i,2)
+         enddo
+         call tridiag(d,ud,rhs,y,m)
+         do j=4,m-4
+            x(j,i)=y(j)
+         enddo
+         endif
+      enddo
+
+      end subroutine
+!----------------------------------------
+      subroutine tridiag(d,dd,b,xc,l)
+        !     Axc = b
+        !     Solve tridiagonal system
+        implicit none
+        integer,intent(in)  :: l
+        real*8,dimension(l) :: d,b
+        real*8,dimension(l) :: dd
+        real*8,dimension(l) :: xc
+        
+!f2py intent(inplace)::d,dd,b,xc
+
+        integer:: k,k0
+        real*8,dimension(l):: gam
+        real*8             :: bet
+
+        k0 = 4
+        bet   = 1. / d(k0)
+        xc(k0) = b(k0)*bet
+        do k=k0+1,l-4
+           gam(k)= dd(k-1)*bet
+           bet     = 1. /(d(k)-dd(k-1)*gam(k))
+           xc(k) = (b(k)-dd(k-1)*xc(k-1))*bet
+        enddo
+        do k=l-5,k0,-1
+           xc(k) = xc(k)-gam(k+1)*xc(k+1)
+        enddo
+
+      end subroutine tridiag
+
+!----------------------------------------
       subroutine computeresidualwithA(msk,A,x,b,y,m,n)
 
 ! compute y=b-A*x
@@ -229,10 +334,6 @@
 
 !      real*8,dimension(n,3) :: xo
       integer:: i,j,km,ko,kp
-      real*8::w,c2
-      integer*1::s
-
-
 
       do j=2,m-1
          do i=2,n-1
@@ -731,6 +832,34 @@
          do i=nh+1,n-nh
             if(msk(j,i).ne.0)then
                y = y + x(j,i)**2
+            endif
+         enddo
+      enddo
+
+      end subroutine
+!----------------------------------------
+      subroutine computeinner(msk,x,y,nh,n,m,z)
+
+! compute z=sum(x*y)
+!
+ 
+      implicit none
+
+      integer,intent(in):: n,m,nh
+      integer*1,dimension(m,n) :: msk
+      real*8,dimension(m,n) :: x,y
+      real*8,intent(out) :: z
+
+!f2py intent(inplace)::x,y,msk
+!f2py intent(out)::z
+
+      integer:: i,j
+
+      z=0.
+      do j=nh+1,m-nh
+         do i=nh+1,n-nh
+            if(msk(j,i).ne.0)then
+               z = z + x(j,i)*y(j,i)
             endif
          enddo
       enddo
