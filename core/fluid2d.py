@@ -21,7 +21,7 @@ class Fluid2d(object):
             if os.path.isdir(param.expdir):
                 pass
             else:
-                os.mkdir(param.expdir)
+                os.makedirs(param.expdir)
             savedscript = '%s/%s.py' % (param.expdir, param.expname)
             outfile = '%s/output.txt' % param.expdir
             sys.stdout = Logger(outfile)
@@ -91,6 +91,7 @@ class Fluid2d(object):
         if self.plot_interactive:
             try:
                 p = import_module(self.plotting_module)
+                print(self.plotting_module)
             except ImportError:
                 print('problem with the interactive plotting')
                 print('this might be due to a backend issue')
