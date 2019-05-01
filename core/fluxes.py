@@ -42,6 +42,7 @@ class Fluxes(object):
         varsize = [len(self.varname_list)]+self.sizevar
         self.x = np.zeros(varsize)
         self.xwork = np.zeros(varsize)
+        self.xwork2 = np.zeros(varsize)
         
         # tracsize = [len(flx_list)]+self.sizevar
         # # work array to store the fluxes after the forward phase and the backward phase
@@ -95,38 +96,39 @@ class Fluxes(object):
 
         self.x[:self.nvarstate, :, :] = x
         # set fluxes entries to zero
-        self.x[self.nvarstate:, :, :] = 0.
-        
-        # self.x[:-3][:, :] = x.copy()
-        # self.x[-3][:, 1:] = 0.5*(x[iu][:, 1:]+x[iu][:, :-1])
-        # self.x[-2][1:, :] = 0.5*(x[iv][1:, :]+x[iv][:-1, :])
-        # fo.cornertocell(self.x[ip], self.x[-1])
-        
-        self.tscheme.forward(self.x, t, dt)
+        self.x[self.nvarstate:, :, :] = 0.       
+        self.tscheme.forward(self.x, t, dt*1e-6)
         self.xwork[:, :, :] = self.x
-        # set fluxes entries to zero
-        self.x[self.nvarstate:, :, :] = 0.
-        
-        # for trac in self.tracer_list:
-        #     ik = self.tracer_list.index(trac)
-        #     self.xforw[ik][:, :] = self.xflx[ik]
-        #     self.yforw[ik][:, :] = self.yflx[ik]
 
         # reverse velocity
-        self.x[iu] *= -1
-        self.x[iv] *= -1
-        self.x[ip] *= -1
-    
-        self.tscheme.forward(self.x, t+dt, -dt)
+        # self.x[iu] *= -1
+        # self.x[iv] *= -1
+        # self.x[ip] *= -1
+        self.x *= -1
+        # set fluxes entries to zero
+        self.x[self.nvarstate:, :, :] = 0.    
+        self.tscheme.forward(self.x, t+dt, -dt*1e-6)
+        self.xwork2[:, :, :] = self.x
+        
+        # # reverse velocity
+        # self.x[iu] *= -1
+        # self.x[iv] *= -1
+        # self.x[ip] *= -1
+        # # set fluxes entries to zero
+        # self.x[self.nvarstate:, :, :] = 0.        
+        # self.tscheme.forward(self.x, t-dt, dt)
+        # self.x[self.nvarstate:, :, :] += self.xwork[self.nvarstate:, :, :]
 
         # don't forget to divide by 'dt' to get the tendency
-        cff = 0.5/dt
+        cff = 0.5/(dt*1e-6)
         nflx = len(self.flx_list)
         for k in range(nflx):
             l = self.nvarstate+k
             j = nflx+k
-            self.flx[k, :, :] = cff*(self.xwork[l]+self.x[l])
-            self.flx[j, :, :] = cff*(self.xwork[l]-self.x[l])
+            self.flx[k, :, :] = cff*(self.xwork[l]-self.x[l])
+            self.flx[j, :, :] = cff*(self.xwork[l]+self.x[l])
+            # self.flx[k, :, :] = cff*(self.x[l]+self.xwork2[l])
+            # self.flx[j, :, :] = cff*(self.x[l]-self.xwork2[l])
             
         
     def advection(self, x, t, dxdt):

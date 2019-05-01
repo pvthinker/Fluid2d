@@ -149,7 +149,7 @@ class Thermalwind(Param):
         self.diags['energy'] = self.diags['ke'] + self.diags['pe'] + self.diags['keV']
 
         self.diags['vorticity'] = cst[2] / a
-        self.diags['enstrophy'] = cst[3] / a
+        self.diags['enstrophy'] = 0.5*cst[3] / a
 
         bm = cst[5] / a
         self.diags['b_mean'] = bm

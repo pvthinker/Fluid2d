@@ -19,6 +19,8 @@ class Output(Param):
         grid.copy(self, self.list_grid)
 
         self.param = param  # to store all the parameters in the netcdf file
+        self.grid = grid
+        self.flxlist = flxlist
 
         # prepare the 'history' file
         self.template = self.expdir+'/%s_his_%03i.nc'
@@ -27,8 +29,6 @@ class Output(Param):
             self.hisfile_joined = '%s/%s_his.nc' % (self.expdir, self.expname)
         else:
             self.hisfile = '%s/%s_his.nc' % (self.expdir, self.expname)
-        self.nchis = NcfileIO(param, grid, self.hisfile,
-                              param.var_to_save, param.varname_list)
 
         if self.var_to_save == 'all':
             self.var_to_save = [v for v in self.varname_list]
@@ -46,7 +46,6 @@ class Output(Param):
                 self.flxfile_joined = '%s/%s_flx.nc' % (self.expdir, self.expname)
             else:
                 self.flxfile = '%s/%s_flx.nc' % (self.expdir, self.expname)
-            self.ncflx = NcfileIO(param, grid, self.flxfile, flxlist, flxlist)
 
         # prepare the 'diagnostics' file
         if self.list_diag == 'all':
@@ -73,8 +72,12 @@ class Output(Param):
         if self.first:
             self.first = False
             # self.create_his(self.grid)
+            self.nchis = NcfileIO(self.param, self.grid, self.hisfile,
+                                  self.param.var_to_save, self.param.varname_list)
+            
             self.nchis.create()
             if self.diag_fluxes:
+                self.ncflx = NcfileIO(self.param, self.grid, self.flxfile, self.flxlist, self.flxlist)
                 self.ncflx.create()
             if self.myrank == 0:
                 self.create_diag(self.diag)

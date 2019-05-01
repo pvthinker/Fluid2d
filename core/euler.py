@@ -136,13 +136,7 @@ class Euler(object):
 
     def advection(self, x, t, dxdt):
         self.timers.tic('rhs_adv')
-        if (self.tscheme.kstage == self.tscheme.kforcing):
-            self.ope.fortran_adv = fa.adv_upwind
-            self.ope.order = 5
-        else:
-            self.ope.fortran_adv = fa.adv_centered
-            self.ope.order = 4
-
+        
         self.ope.rhs_adv(x, t, dxdt)
         self.timers.toc('rhs_adv')
         if (self.tscheme.kstage == self.tscheme.kforcing):
@@ -200,7 +194,7 @@ class Euler(object):
         self.diags['maxspeed'] = cst[0]
         self.diags['ke'] = cst[1] / self.area
         self.diags['vorticity'] = cst[2] / self.area
-        self.diags['enstrophy'] = cst[3] / self.area
+        self.diags['enstrophy'] = 0.5*cst[3] / self.area
         self.diags['px'] = cst[4] / self.area
         self.diags['py'] = cst[5] / self.area
         self.diags['angmom'] = cst[6] / self.area

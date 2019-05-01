@@ -36,25 +36,27 @@ class Restart(object):
     """
 
     def __init__(self, param, grid, f2d, launch=True):
-        self.list_param = ['expname', 'nbproc', 'myrank',
-                           'tend', 'varname_list', 'ninterrestart']
+        self.list_param = ['expname', 'expdir', 'nbproc', 'myrank',
+                           'tend', 'varname_list', 'ninterrestart', 'diag_fluxes']
         param.copy(self, self.list_param)
 
         self.list_grid = ['nh', 'nxl', 'nyl']
         grid.copy(self, self.list_grid)
 
-        self.template = '%s_%02i_restart_%03i.nc'
+        self.template = self.expdir + '/%s_%02i_restart_%03i.nc'
 
         self.get_lastrestart()
 
         self.timelength = f2d.tend
 
-        print('-'*50)
+        if self.myrank == 0:
+            print('-'*50)
         if self.lastrestart is not None:
             self.restart_file = self.template % (
                 self.expname, self.lastrestart, self.myrank)
             if self.myrank == 0:
-                print('restarting from %s' % self.restart_file)
+                print(' Restart found')
+                print(' Restarting from %s' % self.restart_file)
             tend, t, dt, kt, tnextdiag, tnexthis = self.read(f2d.model.var)
             f2d.tend += round(t)
             f2d.t = t
@@ -67,16 +69,25 @@ class Restart(object):
 
         else:
             if self.myrank == 0:
-                print('starting from scratch')
+                print(' No restart')
+                print(' Starting from scratch')
             self.nextrestart = 0
 
-        f2d.output.diagfile = '%s_%02i_diag.nc' % (
+        f2d.output.diagfile = self.expdir + '/%s_%02i_diag.nc' % (
             self.expname, self.nextrestart)
-        f2d.output.template = '%s_%02i_his' % (
+        f2d.output.template = self.expdir +'/%s_%02i_his' % (
             self.expname, self.nextrestart)+'_%03i.nc'
         f2d.output.hisfile = f2d.output.template % (self.myrank)
-        f2d.output.hisfile_joined = '%s_%02i_his.nc' % (
+        f2d.output.hisfile_joined = self.expdir + '/%s_%02i_his.nc' % (
             self.expname, self.nextrestart)
+        if self.diag_fluxes:
+            f2d.output.template = self.expdir +'/%s_%02i_flx' % (
+                self.expname, self.nextrestart)+'_%03i.nc'
+            f2d.output.flxfile = f2d.output.template % (self.myrank)
+            f2d.output.flxfile_joined = self.expdir + '/%s_%02i_flx.nc' % (
+                self.expname, self.nextrestart)
+            
+            
 
         # split the integration in 'ninterrestart' intervals and
         # save a restart at the end of each
@@ -113,7 +124,7 @@ class Restart(object):
 
     def get_lastrestart(self):
         """ determine the index of the last restart"""
-        files = glob.glob('%s_*_restart_000.nc' % self.expname)
+        files = glob.glob(self.expdir + '/%s_*_restart_000.nc' % self.expname)
         nbrestart = len(files)
         if nbrestart == 0:
             self.lastrestart = None

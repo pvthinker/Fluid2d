@@ -182,13 +182,14 @@
     ! fluxes (fym is the flux through the bottom edge)
     real*8,dimension(n) :: fx,fy,fym
     
-    integer*1:: mx4,mx2
-    integer*1,dimension(n)::my4,my2
+    integer*1:: mx6,mx4,mx2
+    integer*1,dimension(n)::my6,my4,my2
 
     real*8::zdx,dx,zdy,dy,a,logcosh,umax,Uparab,u1,aa,bb
 
     real*8::KK,UU,up,um,qp,qm
 
+    real*8::e1,e2,e3
     real*8::d1,d2
     real*8::c1
     
@@ -200,6 +201,10 @@
        stop
     endif
 
+    e1 = 1./60.
+    e2 = -2./15.
+    e3 = 37./60.
+    
     d1 = -1./12.
     d2 =  7./12.
 
@@ -212,19 +217,25 @@
     zdy = 1./dy
     !
     do i=nh,n-nh
-       my4(i)=msk(2,i)+msk(3,i)+msk(4,i)+msk(5,i)
-       my2(i)=         msk(3,i)+msk(4,i)
+       my6(i)=msk(1,i)+msk(2,i)+msk(3,i)+msk(4,i)+msk(5,i)+msk(6,i)
+       my4(i)=         msk(2,i)+msk(3,i)+msk(4,i)+msk(5,i)
+       my2(i)=                  msk(3,i)+msk(4,i)
     enddo
 
     ! main and single double do-loop
     do j=nh,m-nh
        ! first compute the fluxes across cells
        do i=nh,n-nh
+          mx6=msk(j,i-2)+msk(j,i-1)+msk(j,i)+msk(j,i+1)+msk(j,i+2)
+          mx6=mx6+msk(j,i+3)
           mx4=msk(j,i-1)+msk(j,i)+msk(j,i+1)+msk(j,i+2)
           mx2=           msk(j,i)+msk(j,i+1)
           if (mx2.eq.2)then             
              ! x flux
-             if ((mx4.eq.4).and.(order.eq.4)) then
+             if ((mx6.eq.6).and.(order.eq.6)) then
+                qp=e1*(x(j,i-2)+x(j,i+3))+e2*(x(j,i-1)+x(j,i+2))
+                qp=qp+e3*(x(j,i)+x(j,i+1))
+             else if ((mx4.eq.4).and.(order.eq.4)) then
                 qp=d1*(x(j,i-1)+x(j,i+2))+d2*(x(j,i)+x(j,i+1))
              else if ((mx2.eq.2).and.(order.ge.2)) then
                 qp=c1*(x(j,i)+x(j,i+1))
@@ -237,7 +248,10 @@
           ! same but for the along y flux
           if (my2(i).eq.2)then
              !
-             if ((my4(i).eq.4).and.(order.eq.4)) then
+             if ((my6(i).eq.6).and.(order.eq.6)) then
+                qp=e1*(x(j-2,i)+x(j+3,i))
+                qp=qp+e2*(x(j-1,i)+x(j+2,i))+e3*(x(j,i)+x(j+1,i))
+             else if ((my4(i).eq.4).and.(order.eq.4)) then
                 qp=d1*(x(j-1,i)+x(j+2,i))+d2*(x(j,i)+x(j+1,i))
              else if ((my2(i).eq.2).and.(order.ge.2)) then
                 qp=c1*(x(j,i)+x(j+1,i))
@@ -246,6 +260,7 @@
           else
              fy(i)=0.
           endif
+          my6(i)=my6(i)-msk(j-2,i)+msk(j+4,i)
           my4(i)=my4(i)-msk(j-1,i)+msk(j+3,i)
           my2(i)=my2(i)-msk(j  ,i)+msk(j+2,i)
        enddo

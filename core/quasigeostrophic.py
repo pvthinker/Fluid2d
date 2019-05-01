@@ -206,6 +206,6 @@ class QG(object):
         self.diags['maxspeed'] = cst[0]
         self.diags['ke'] = cst[1] / self.area
         self.diags['pv'] = cst[2] / self.area
-        self.diags['pv2'] = cst[3] / self.area
+        self.diags['pv2'] = 0.5*cst[3] / self.area
         self.diags['ape'] = cst[4] / self.area
         self.diags['energy'] = (cst[1]+cst[4]) / self.area

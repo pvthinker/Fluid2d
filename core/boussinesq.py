@@ -93,13 +93,6 @@ class Boussinesq(object):
         banom[:, :] = self.var.get('buoyancy')-self.bref
 
     def dynamics(self, x, t, dxdt):
-        if (self.tscheme.kstage == self.tscheme.kforcing):
-            self.ope.fortran_adv = fa.adv_upwind
-            self.ope.order = 3
-        else:
-            self.ope.fortran_adv = fa.adv_centered
-            self.ope.order = 4
-
         self.ope.rhs_adv(x, t, dxdt)
         # db/dx is a source term for the vorticity
         self.ope.rhs_torque(x, t, dxdt)
@@ -147,6 +140,6 @@ class Boussinesq(object):
         self.diags['pe'] = cst[4] / self.area
         self.diags['energy'] = (cst[1]+cst[4]) / self.area
         self.diags['vorticity'] = cst[2] / self.area
-        self.diags['enstrophy'] = cst[3] / self.area
+        self.diags['enstrophy'] = 0.5*cst[3] / self.area
         self.diags['buoyancy'] = cst[5] / self.area
         self.diags['brms'] = np.sqrt(cst[6] / self.area-(cst[5]/self.area)**2)
