@@ -23,7 +23,7 @@ class Advection(object):
         grid.copy(self, self.list_grid)
 
         # for variables
-        param.varname_list = ('tracer', 'psi', 'u', 'v', 'vorticity')
+        param.varname_list = ['tracer', 'psi', 'u', 'v', 'vorticity']
         param.sizevar = [grid.nyl, grid.nxl]
         self.var = Var(param)
 

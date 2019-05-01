@@ -7,7 +7,7 @@ from time import time as clock
 import sys
 from subprocess import call
 import os
-
+import fluxes as Flx
 
 class Fluid2d(object):
     def __init__(self, param, grid):
@@ -38,6 +38,7 @@ class Fluid2d(object):
         self.list_param = ['modelname', 'tend', 'adaptable_dt', 'dt', 'cfl',
                            'dtmax', 'myrank', 'nprint', 'exacthistime',
                            'rescaledtime', 'noslip', 'geometry',
+                           'diag_fluxes', 'print_param',
                            'enforce_momentum', 'forcing', 'decay',
                            'plotting_module', 'freq_save', 'freq_plot',
                            'plot_interactive', 'nbproc',
@@ -88,6 +89,12 @@ class Fluid2d(object):
             self.model.ope.psi = grid.island.psi
             # self.diag = Diag(param,grid)
 
+        if self.diag_fluxes:
+            self.flx = Flx.Fluxes(param, grid, self.model.ope)
+            flxlist = self.flx.fullflx_list
+        else:
+            flxlist = None
+            
         if self.plot_interactive:
             try:
                 p = import_module(self.plotting_module)
@@ -110,11 +117,13 @@ class Fluid2d(object):
         self.t = 0.
         self.kt = 0
 
-        self.output = Output(param, grid, self.model.diags)
-        self.print_config(param)
+        self.output = Output(param, grid, self.model.diags, flxlist=flxlist)
+        self.print_config(param, start=True)
 
-    def print_config(self, param):
+    def print_config(self, param, start=True):
         outputfiles = [self.output.hisfile, self.output.diagfile]
+        if self.diag_fluxes:
+            outputfiles += [self.output.flxfile]
         if self.plot_interactive:
             if hasattr(self.plotting, 'mp4file'):
                 outputfiles += [self.plotting.mp4file]
@@ -123,22 +132,26 @@ class Fluid2d(object):
             outputfiles += [self.savedscript]
 
         if self.myrank == 0:
-            print('-'*50)
-            print(' Fluid2d summary:')
-            print('-'*50)
-            print('  - model equations: %s' % self.modelname)
-            print('  - grid size: %i x %i' % (self.nx, self.ny))
-            print('  - integration time: %.2f' % self.tend)
-            print('  - advection schemes applied to:')
-            for trac in self.tracer_list:
-                print('    - %s' % trac)
-            print('  - output files:')
-            for f in outputfiles:
-                print('    - %s' % f)
-            print(' You may recover all the experiment parameters by doing')
-            print(' ncdump -h %s' % self.output.hisfile)
+            if start:
+                print('-'*50)
+                print(' Fluid2d summary:')
+                print('-'*50)
+                print('  - model equations: %s' % self.modelname)
+                print('  - grid size: %i x %i' % (self.nx, self.ny))
+                print('  - integration time: %.2f' % self.tend)
+                print('  - advection schemes applied to:')
+                for trac in self.tracer_list:
+                    print('    - %s' % trac)
+            else:
+                print('  - output files:')
+                for f in outputfiles:
+                    print('    - %s' % f)
+                print('-'*50)
+                print(' You may recover all the experiment parameters by doing')
+                print(' ncdump -h %s' % self.output.hisfile)
+                print('-'*50)                                
 
-        if param.print_param and (self.myrank == 0):
+        if self.print_param and (self.myrank == 0) and start:
             print('-'*50)
             print(' Extended list of all parameters')
             print('-'*50)
@@ -158,7 +171,13 @@ class Fluid2d(object):
         self.model.diagnostics(self.model.var, self.t)
         self.model.diags['dkedt'] = 0.
         self.model.diags['dvdt'] = 0.
-        self.output.do(self.model.var.state, self.model.diags, self.t, self.kt)
+        data = {'his': self.model.var.state,
+                'diag': self.model.diags}
+        if self.diag_fluxes:
+            data['flx'] = self.flx.flx
+            self.flx.diag_fluxes(self.model.var.state, self.t, self.dt)
+
+        self.output.do(data, self.t, self.kt)
 
         if self.plot_interactive:
             if hasattr(self.plotting, 'fig'):
@@ -192,7 +211,7 @@ class Fluid2d(object):
             # to avoid having suddenly a very small time step, which breaks
             # the smoothness of the time integration, the time step is
             # adjusted 8 time steps ahead of time.
-            if self.exacthistime:
+            if self.exacthistime and self.adaptable_dt:
                 if (self.t+8*self.dt > self.output.tnexthis) and (reduce == 0):
                     reduce = 8
                 if (reduce > 0):
@@ -236,8 +255,11 @@ class Fluid2d(object):
                 print('\rkt=%-4i %s = %.2g%s' %
                       (self.kt, warning, dke, white), end='')
 
-            self.output.do(self.model.var.state,
-                           self.model.diags, self.t, self.kt)
+            if self.diag_fluxes and (self.t >= self.output.tnexthis):
+                # this is a costly diagnostic, do it only before writing it
+                self.flx.diag_fluxes(self.model.var.state, self.t, self.dt)
+            
+            self.output.do(data, self.t, self.kt)
 
             if self.dt == self.dtmax:
                 flag = '*'
@@ -292,6 +314,7 @@ class Fluid2d(object):
             else:
                 print('too many cores will be idle ' +
                       'join the history files manually')
+        self.print_config(None, start=False)
 
     def enforce_zero_momentum(self):
         if self.enforce_momentum:

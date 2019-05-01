@@ -246,6 +246,11 @@
             "default": 1.0,
             "doc": "Interval of time between two outputs in the history file"
         },
+        "diag_fluxes": {
+            "type": "bool",
+            "default": false,
+            "doc": "Activate the diagnostic of reversible and irreversible tracer fluxes"
+        },
         "exacthistime": {
             "type": "bool",
             "default": true,

@@ -148,7 +148,7 @@ class Plotting(object):
 
             if videoencoder is None:
                 print('\n')
-                print('Neither avconv or ffmeg was found')
+                print('Neither avconv or ffmpeg was found')
                 print('Install one of them or set param.generate_mp4 = False')
                 exit(0)
 
