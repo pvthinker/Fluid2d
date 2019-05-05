@@ -152,8 +152,8 @@ class Thermalwind(Param):
         self.diags['enstrophy'] = 0.5*cst[3] / a
 
         bm = cst[5] / a
-        self.diags['b_mean'] = bm
-        self.diags['b_std'] = sqrt(cst[6] / a - bm**2)
+        self.diags['buoyancy'] = bm
+        self.diags['brms'] = sqrt(cst[6] / a - bm**2)
 
         pvm = cst[7] / a
         pvneg_mean = cst[9] / a

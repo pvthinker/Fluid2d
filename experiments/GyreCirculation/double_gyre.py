@@ -54,7 +54,7 @@ param.Kdiff = 0.5e-4*grid.dx
 
 # add an island
 # grid.msk[28:32,34:38]=0
-# grid.finalize()
+# grid.finalize_msk()
 
 
 f2d = Fluid2d(param, grid)

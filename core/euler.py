@@ -175,7 +175,7 @@ class Euler(object):
         yr = self.yr
 
         ke, maxu = fd.computekemaxu(self.msk, u, v, self.nh)
-        ke = fd.computekewithpsi(self.msk, trac, psi, self.nh)
+        # ke = fd.computekewithpsi(self.msk, trac, psi, self.nh)
 
         z, z2 = fd.computesumandnorm(self.msk, trac, self.nh)
 

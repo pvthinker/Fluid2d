@@ -310,7 +310,7 @@
       integer:: i,j,ii
       integer*1:: ml,mr,mm,one
 
-      coef = gravity/(dx)
+      coef = 0.5*gravity/(dx)
 
       one = 1
       do j=1+nh,m-nh

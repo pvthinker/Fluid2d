@@ -258,7 +258,7 @@
       do j=nh+1,m-nh
          do i=nh+1,n-nh
             if (msk(j,i).eq.1) then
-               ke = ke - 0.25*(psi(j,i)+psi(j-1,i)
+               ke = ke - 0.125*(psi(j,i)+psi(j-1,i)
      & +psi(j-1,i-1)+psi(j,i-1))*omega(j,i)
             endif
          enddo

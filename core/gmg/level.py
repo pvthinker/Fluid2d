@@ -263,9 +263,12 @@ class Grid(object):
         
         # 9 points 2D Laplacian stencil [the factor 1/2 is weird but
         # in practice it should be here].
-        
-        a,b,c = -6./2, 1./2, 0.5/2
-        stencil = array([[c, b, c], [b, a, b], [c, b, c]]).astype(float)
+
+        if self.dx == self.dy:
+            if self.myrank == 0:
+                print('  => use the nine points stencil')
+            a,b,c = -6./2, 1./2, 0.5/2
+            stencil = array([[c, b, c], [b, a, b], [c, b, c]]).astype(float)
 
         Afinest = zeros((self.mv, self.nv, 9))
         I, J = meshgrid(arange(self.nv-2)+1, arange(self.mv-2)+1)

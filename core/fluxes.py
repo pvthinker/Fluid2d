@@ -7,10 +7,11 @@ import sys
 
 class Fluxes(object):
 
-    def __init__(self, param, grid, ope):
+    def __init__(self, param, grid, ope, dynamics):
         self.list_param = ['timestepping', 'varname_list',
                            'tracer_list', 'order', 'aparab',
-                           'sizevar', 'flux_splitting_method']
+                           'sizevar', 'flux_splitting_method',
+                           'modelname']
 
         p = copy.deepcopy(param)
         newvariables = ['uc', 'vc', 'psic']
@@ -67,8 +68,10 @@ class Fluxes(object):
         self.cst[4] = self.aparab
         
         # for timescheme
+        #p.timestepping = 'EF'
         self.tscheme = Timescheme(p, self.x)
-        self.tscheme.set(self.advection, self.timestepping)
+        self.tscheme.set(self.advection, p.timestepping)
+#        self.tscheme.set(dynamics, self.timestepping)
 
         # controls the flux splitting method
         # 0 = min/max
@@ -93,46 +96,55 @@ class Fluxes(object):
         iu = self.varname_list.index('u')
         iv = self.varname_list.index('v')
         ip = self.varname_list.index('psi')
+        iw = self.varname_list.index('vorticity')
 
         self.x[:self.nvarstate, :, :] = x
         # set fluxes entries to zero
         self.x[self.nvarstate:, :, :] = 0.       
-        self.tscheme.forward(self.x, t, dt*1e-6)
+        self.tscheme.forward(self.x, t, dt)
         self.xwork[:, :, :] = self.x
 
         # reverse velocity
-        # self.x[iu] *= -1
-        # self.x[iv] *= -1
-        # self.x[ip] *= -1
+        #self.x[iu] *= -1
+        #self.x[iv] *= -1
+        #self.x[ip] *= -1
+        #self.x[iw] *= -1
         self.x *= -1
         # set fluxes entries to zero
         self.x[self.nvarstate:, :, :] = 0.    
-        self.tscheme.forward(self.x, t+dt, -dt*1e-6)
+        self.tscheme.forward(self.x, t+dt, -2*dt)
         self.xwork2[:, :, :] = self.x
         
         # # reverse velocity
-        # self.x[iu] *= -1
-        # self.x[iv] *= -1
-        # self.x[ip] *= -1
-        # # set fluxes entries to zero
-        # self.x[self.nvarstate:, :, :] = 0.        
-        # self.tscheme.forward(self.x, t-dt, dt)
-        # self.x[self.nvarstate:, :, :] += self.xwork[self.nvarstate:, :, :]
+        #self.x[iu] *= -1
+        #self.x[iv] *= -1
+        #self.x[ip] *= -1
+        #self.x[iw] *= -1
+        self.x *= -1
+        # set fluxes entries to zero
+        self.x[self.nvarstate:, :, :] = 0.        
+        self.tscheme.forward(self.x, t-dt, dt)
+        self.x[self.nvarstate:, :, :] += self.xwork[self.nvarstate:, :, :]
 
         # don't forget to divide by 'dt' to get the tendency
-        cff = 0.5/(dt*1e-6)
+        cff = 0.5/(2*dt)
         nflx = len(self.flx_list)
         for k in range(nflx):
             l = self.nvarstate+k
             j = nflx+k
-            self.flx[k, :, :] = cff*(self.xwork[l]-self.x[l])
-            self.flx[j, :, :] = cff*(self.xwork[l]+self.x[l])
-            # self.flx[k, :, :] = cff*(self.x[l]+self.xwork2[l])
-            # self.flx[j, :, :] = cff*(self.x[l]-self.xwork2[l])
+            sign = -1
+            # self.flx[k, :, :] = cff*(self.xwork[l]+sign*self.x[l])
+            # self.flx[j, :, :] = cff*(self.xwork[l]-sign*self.x[l])
+            self.flx[k, :, :] = cff*(self.x[l]+sign*self.xwork2[l])
+            self.flx[j, :, :] = cff*(self.x[l]-sign*self.xwork2[l])
             
         
     def advection(self, x, t, dxdt):
         self.rhs_adv(x, t, dxdt)
+        if self.modelname is 'boussinesq':
+            self.ope.rhs_torque(x, t, dxdt)
+        elif self.modelname is 'thermalwind':
+            self.ope.rhs_thermalwind(x, t, dxdt)
         self.ope.invert_vorticity(dxdt, flag='fast')
 
     def rhs_adv(self, x, t, dxdt):
@@ -145,8 +157,7 @@ class Fluxes(object):
         u = x[iu]
         v = x[iv]
 
-        itrac = 0
-        for trac in self.tracer_list:
+        for itrac, trac in enumerate(self.tracer_list):
             ik = self.varname_list.index(trac)
             y = dxdt[ik]
             ix = self.nvarstate+itrac*2
@@ -163,7 +174,6 @@ class Fluxes(object):
             # not updated by the Fortran routine
             # it should be done manually
             # (this yields an excessive data movement)
-            dxdt[ik][:, :] = y
+            dxdt[ik, :, :] = y
             dxdt[ix, :, :] = xf
             dxdt[iy, :, :] = yf
-            itrac += 1

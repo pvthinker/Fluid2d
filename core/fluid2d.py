@@ -90,7 +90,7 @@ class Fluid2d(object):
             # self.diag = Diag(param,grid)
 
         if self.diag_fluxes:
-            self.flx = Flx.Fluxes(param, grid, self.model.ope)
+            self.flx = Flx.Fluxes(param, grid, self.model.ope, self.model.dynamics)
             flxlist = self.flx.fullflx_list
         else:
             flxlist = None
@@ -347,7 +347,12 @@ class Fluid2d(object):
             dt = self.cfl * min(self.dx, self.dy) / \
                 self.model.diags['maxspeed']
             # filter in time, change the filter_coef
-            self.filter_coef = 0.05
+            if dt > 0.8*self.dt:
+                self.filter_coef = 0.05
+            else:
+                # time step decreases too fast
+                # don't filter, otherwise the model blows up
+                self.filter_coef = 1.
             self.dt = (1.-self.filter_coef)*self.dt + self.filter_coef*dt
             if self.dt > self.dtmax:
                 self.dt = self.dtmax
