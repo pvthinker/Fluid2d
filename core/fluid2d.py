@@ -143,9 +143,10 @@ class Fluid2d(object):
                 for trac in self.tracer_list:
                     print('    - %s' % trac)
             else:
-                print('  - output files:')
+                print('-'*50)
+                print(' Output files:')
                 for f in outputfiles:
-                    print('    - %s' % f)
+                    print('  - %s' % f)
                 print('-'*50)
                 print(' You may recover all the experiment parameters by doing')
                 print(' ncdump -h %s' % self.output.hisfile)

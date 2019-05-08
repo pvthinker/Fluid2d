@@ -178,7 +178,7 @@ class Gmg(object):
             res0 = res
             nite += 1
             if (self.myrank == 0) and (param['verbose']):
-                print(' ite = %i / res = %g / conv = %g' % (nite, res, conv))
+                print(' ite = {} / res = {:.2e} / conv = {:8.4f}'.format(nite, res, conv))
 
             if (conv < 1):
                 nite_diverge += 1
