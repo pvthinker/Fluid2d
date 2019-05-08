@@ -111,7 +111,7 @@ class Param(object):
 
 
 if __name__ == "__main__":
-    param = Param()
+    param = Param('default.xml')
     print('liste of parameters')
     print(param.listall())
 

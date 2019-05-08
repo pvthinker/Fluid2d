@@ -40,7 +40,7 @@ param.adaptable_dt=True
 param.cfl=1.   # desired cfl if adaptable_dt=True
 param.dt = 1. # desired dt if adaptable_dt=False
 param.dtmax=100. # max dt, used for accelerated flows or flows
-                 # dominated by waves, in these case, dtmax requieres
+                 # dominated by waves, in these case, dtmax requires
                  # a little bit of tuning
 
 

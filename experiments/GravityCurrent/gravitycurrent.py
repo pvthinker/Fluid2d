@@ -74,7 +74,7 @@ def stratif():
     return (1-b) * grid.msk
 
 
-# to have a lock exchange type flow
+# to have a look, exchange the type of flow
 buoy[:] = (1-stratif() - 0.5)*grid.msk
 
 buoy[:] = (yr * (1 + 1*(1+np.tanh((xr-param.Lx/2)/0.1)))) * grid.msk
