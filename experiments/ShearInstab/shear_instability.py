@@ -73,14 +73,17 @@ def vortex(x0, y0, sigma):
 sigma = 0.07
 yy = (yr/param.Ly-0.5)
 
-# comment/uncomment choice A vs. B
+# comment/uncomment choice A vs. B vs. C
 
 # choice A/ corresponding to a gaussian shaped jet
 # vor[:] = (yy/sigma)*exp( - (yy/sigma)**2/2 )
 
 # choice B/ or a cosine shaped jet
-vor[:] = np.sin(yy*np.pi/sigma)
-vor[:] = np.sign(yy*np.pi/sigma)
+# vor[:] = np.sin(yy*np.pi/sigma)
+# vor[abs(yy/sigma) > 1] = 0.
+
+# choice C/ or a piecewise constant jet
+vor[:] = np.sign(yy)
 vor[abs(yy/sigma) > 1] = 0.
 
 # add noise to trigger the instability

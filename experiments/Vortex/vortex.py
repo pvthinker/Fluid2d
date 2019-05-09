@@ -158,7 +158,6 @@ elif vortex_config == 'dipole2':
     vtype = 'gaussian'
     sigma = 0.05*param.Lx
     x0 = 0.7
-    y2 = 0.2
     vor[:] = -vortex(param, grid, x0, 0.42, sigma,
                      vtype, ratio=1)
     vor[:] += vortex(param, grid, x0, 0.58, sigma,

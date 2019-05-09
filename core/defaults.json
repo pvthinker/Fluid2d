@@ -37,7 +37,7 @@
         "order": {
             "type": "int",
             "default": 5,
-            "doc": "Order of the advective flux discretization. Should be in [1,2,3,4,5]. 1, 3, 5 are upwind fluxes ; 2, 4 are centered fluxes. Upwind fluxes naturally provides enough dissipation to the code. Centered fluxes requiere to activate the diffusion/viscosity to smooth out the noise at the grid scale."
+            "doc": "Order of the advective flux discretization. Should be in [1,2,3,4,5]. 1, 3, 5 are upwind fluxes ; 2, 4 are centered fluxes. Upwind fluxes naturally provide enough dissipation to the code. Centered fluxes require to activate the diffusion/viscosity to smooth out the noise at the grid scale."
         },
         "aparab": {
             "type": "float",
