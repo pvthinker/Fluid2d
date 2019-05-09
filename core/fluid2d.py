@@ -143,8 +143,8 @@ class Fluid2d(object):
                 for trac in self.tracer_list:
                     print('    - %s' % trac)
             else:
-                print('-'*50)
                 print(' Output files:')
+                print('-'*50)
                 for f in outputfiles:
                     print('  - %s' % f)
                 print('-'*50)
