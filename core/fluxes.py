@@ -7,14 +7,14 @@ import sys
 
 class Fluxes(object):
 
-    def __init__(self, param, grid, ope, dynamics):
+    def __init__(self, param, grid, ope):
         self.list_param = ['timestepping', 'varname_list',
                            'tracer_list', 'order', 'aparab',
                            'sizevar', 'flux_splitting_method',
                            'modelname']
 
         p = copy.deepcopy(param)
-        newvariables = ['uc', 'vc', 'psic']
+        # newvariables = ['uc', 'vc', 'psic']
         #p.tracer_list += newvariables
         #p.varname_list += newvariables
         flx_list = []
@@ -98,6 +98,8 @@ class Fluxes(object):
         ip = self.varname_list.index('psi')
         iw = self.varname_list.index('vorticity')
 
+        #dt = dt*1e-6
+        
         self.x[:self.nvarstate, :, :] = x
         # set fluxes entries to zero
         self.x[self.nvarstate:, :, :] = 0.       
@@ -105,14 +107,15 @@ class Fluxes(object):
         self.xwork[:, :, :] = self.x
 
         # reverse velocity
-        #self.x[iu] *= -1
-        #self.x[iv] *= -1
-        #self.x[ip] *= -1
-        #self.x[iw] *= -1
-        self.x *= -1
+        self.x[:self.nvarstate, :, :] = x
+        self.x[iu] *= -1
+        self.x[iv] *= -1
+        self.x[ip] *= -1
+        self.x[iw] *= -1
+        #self.x *= -1
         # set fluxes entries to zero
         self.x[self.nvarstate:, :, :] = 0.    
-        self.tscheme.forward(self.x, t+dt, -2*dt)
+        self.tscheme.forward(self.x, t+dt, -dt)
         self.xwork2[:, :, :] = self.x
         
         # # reverse velocity
@@ -120,23 +123,26 @@ class Fluxes(object):
         #self.x[iv] *= -1
         #self.x[ip] *= -1
         #self.x[iw] *= -1
-        self.x *= -1
+        #self.x *= -1
         # set fluxes entries to zero
-        self.x[self.nvarstate:, :, :] = 0.        
-        self.tscheme.forward(self.x, t-dt, dt)
-        self.x[self.nvarstate:, :, :] += self.xwork[self.nvarstate:, :, :]
+        #self.x[self.nvarstate:, :, :] = 0.        
+        #self.tscheme.forward(self.x, t-dt, dt)
+        #self.xwork[self.nvarstate:, :, :] += self.x[self.nvarstate:, :, :]
 
         # don't forget to divide by 'dt' to get the tendency
-        cff = 0.5/(2*dt)
+        cff = 0.5/(dt)
         nflx = len(self.flx_list)
         for k in range(nflx):
             l = self.nvarstate+k
             j = nflx+k
-            sign = -1
+            if k <2:
+                sign = -1 #for vorticity
+            else:
+                sign = 1 # for buoyancy
             # self.flx[k, :, :] = cff*(self.xwork[l]+sign*self.x[l])
             # self.flx[j, :, :] = cff*(self.xwork[l]-sign*self.x[l])
-            self.flx[k, :, :] = cff*(self.x[l]+sign*self.xwork2[l])
-            self.flx[j, :, :] = cff*(self.x[l]-sign*self.xwork2[l])
+            self.flx[k, :, :] = cff*(self.xwork[l]+sign*self.xwork2[l])
+            self.flx[j, :, :] = cff*(self.xwork[l]-sign*self.xwork2[l])
             
         
     def advection(self, x, t, dxdt):
@@ -156,7 +162,8 @@ class Fluxes(object):
         iv = self.varname_list.index('v')
         u = x[iu]
         v = x[iv]
-
+        # don't forget to adjust the maxspeed
+        self.cst[3] = self.ope.cst[3]
         for itrac, trac in enumerate(self.tracer_list):
             ik = self.varname_list.index(trac)
             y = dxdt[ik]
@@ -170,6 +177,8 @@ class Fluxes(object):
                              self.fs_method,
                              self.order)
             self.ope.fill_halo(y)
+            self.ope.fill_halo(xf)
+            self.ope.fill_halo(yf)
             # for an unknown reason dxdt[ik] is
             # not updated by the Fortran routine
             # it should be done manually

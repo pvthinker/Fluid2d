@@ -90,7 +90,7 @@ class Fluid2d(object):
             # self.diag = Diag(param,grid)
 
         if self.diag_fluxes:
-            self.flx = Flx.Fluxes(param, grid, self.model.ope, self.model.dynamics)
+            self.flx = Flx.Fluxes(param, grid, self.model.ope)
             flxlist = self.flx.fullflx_list
         else:
             flxlist = None
@@ -175,6 +175,10 @@ class Fluid2d(object):
                 'diag': self.model.diags}
         if self.diag_fluxes:
             data['flx'] = self.flx.flx
+            # it is important to set dt (in the case of 'adaptable_dt')
+            # because otherwise this first diagnostic can go crazy
+            # and for an unknown reason this can spoil the whole file
+            self.set_dt(self.kt)
             self.flx.diag_fluxes(self.model.var.state, self.t, self.dt)
 
         self.output.do(data, self.t, self.kt)
@@ -202,7 +206,7 @@ class Fluid2d(object):
         reduce = 0
         while (self.t < self.tend and not(self.stop)):
 
-            self.set_dt()
+            self.set_dt(self.kt)
 
             # reduce the time step to arrive right at the desired
             # next history time when param.exacthistime == True (default)
@@ -341,7 +345,7 @@ class Fluid2d(object):
         self.model.set_psi_from_vorticity()
         self.loop()
 
-    def set_dt(self):
+    def set_dt(self, kt):
 
         if ((self.adaptable_dt) & (self.model.diags['maxspeed'] != 0)):
             dt = self.cfl * min(self.dx, self.dy) / \
