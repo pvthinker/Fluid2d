@@ -104,7 +104,7 @@
     </name>
     <name value="geometry">
       <type>str</type>
-      <avail>disc,perio,square,ychannel,xchannel</avail>
+      <avail>disc,perio,closed,ychannel,xchannel</avail>
       <default>disc</default>
       <doc lang='en'>
         Domain shape. It offers a list of predefined masks. You may change the mask in your script. See for instance experiments/Vortex/vortex.py for an example.

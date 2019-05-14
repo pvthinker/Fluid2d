@@ -121,7 +121,7 @@
             "avail": [
                 "disc",
                 "perio",
-                "square",
+                "closed",
                 "ychannel",
                 "xchannel"
             ],

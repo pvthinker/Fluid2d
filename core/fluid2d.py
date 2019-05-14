@@ -54,7 +54,7 @@ class Fluid2d(object):
         grid.copy(self, self.list_grid)
 
         if param.modelname == 'euler':
-            if not(self.geometry in ['square', 'disc']):
+            if self.geometry not in ['closed', 'disc']:
                 self.enforce_momentum = False
             from euler import Euler
             self.model = Euler(param, grid)
@@ -143,9 +143,10 @@ class Fluid2d(object):
                 for trac in self.tracer_list:
                     print('    - %s' % trac)
             else:
-                print('  - output files:')
+                print(' Output files:')
+                print('-'*50)
                 for f in outputfiles:
-                    print('    - %s' % f)
+                    print('  - %s' % f)
                 print('-'*50)
                 print(' You may recover all the experiment parameters by doing')
                 print(' ncdump -h %s' % self.output.hisfile)

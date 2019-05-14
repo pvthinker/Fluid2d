@@ -26,11 +26,8 @@ param.Lx = 2.   # domain size in x [Lx can be dimensional if the user
 param.Ly = param.Lx/2 # domain size in y. The model imposes that dx=dy
                       # => Lx/nx = Ly/ny
 
-param.geometry='square' # square, disc, xchannel, ychannel,
-                        # perio. 'square' is a closed domain. For a
-                        # more complex domain, adjust the grid.msk
-                        # once grid is available
-
+param.geometry = 'closed'  # closed, disc, xchannel, ychannel, perio.
+# For a more complex domain, adjust the grid.msk once grid is available
 
 
 

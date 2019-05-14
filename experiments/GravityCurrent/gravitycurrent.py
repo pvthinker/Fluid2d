@@ -15,7 +15,7 @@ param.npx = 1
 param.npy = 1
 param.Lx = 2.
 param.Ly = 1.
-param.geometry = 'square'
+param.geometry = 'closed'
 
 # time
 param.tend = 5.
