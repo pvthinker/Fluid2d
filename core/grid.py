@@ -82,13 +82,13 @@ class Grid(Param):
         if self.geometry == 'perio':
             pass
 
-        if self.geometry in ['xperio', 'xchannel', 'closed', 'square', 'disc']:
+        if self.geometry in ['xperio', 'xchannel', 'closed', 'disc']:
             if self.j0 == npy-1:  # northern boundary
                 self.msk[-nh:, :] = 0
             if self.j0 == 0:  # southern boundary
                 self.msk[:nh, :] = 0
 
-        if self.geometry in ['yperio', 'ychannel', 'closed', 'square', 'disc']:
+        if self.geometry in ['yperio', 'ychannel', 'closed', 'disc']:
             if self.i0 == npx-1:  # east
                 self.msk[:, -nh:] = 0
             if self.i0 == 0:  # west
@@ -147,7 +147,7 @@ if __name__ == "__main__":
     param.npy = 2
     param.nx = 10
     param.ny = 10
-    param.geometry = 'square'
+    param.geometry = 'closed'
     grid = Grid(param)
 
     print("myrank is :", param.myrank)

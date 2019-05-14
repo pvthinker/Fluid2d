@@ -13,7 +13,7 @@ param.ny = 64
 param.npy = 1
 param.Lx = 2.
 param.Ly = param.Lx/2
-param.geometry = 'square'
+param.geometry = 'closed'
 
 # time
 param.tend = 2000.

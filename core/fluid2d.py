@@ -54,7 +54,7 @@ class Fluid2d(object):
         grid.copy(self, self.list_grid)
 
         if param.modelname == 'euler':
-            if not(self.geometry in ['square', 'disc']):
+            if self.geometry not in ['closed', 'disc']:
                 self.enforce_momentum = False
             from euler import Euler
             self.model = Euler(param, grid)
