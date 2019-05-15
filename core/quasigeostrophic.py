@@ -157,7 +157,7 @@ class QG(object):
         # substract the background pv
         dxdt[self.ipva][:, :] = dxdt[self.ipv]  # -self.pvback*self.dt
 #        self.ope.invert_vorticity(dxdt,flag='fast')
-        self.ope.invert_vorticity(dxdt, flag='fast')
+        self.ope.invert_vorticity(dxdt, flag='fast', island=self.isisland)
 #        self.kt +=1
 
     def add_noslip(self, x):
@@ -177,7 +177,7 @@ class QG(object):
 
         state = self.var.state
         state[self.ipva] = state[self.ipv] - self.pvback
-        self.ope.invert_vorticity(self.var.state, flag='full')
+        self.ope.invert_vorticity(self.var.state, flag='full', island=self.isisland)
 
     def diagnostics(self, var, t):
         """ Integral diagnostics for the QG model
