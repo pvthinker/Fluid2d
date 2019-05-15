@@ -393,7 +393,7 @@ class Operators(Param):
         psi = x[ip]
 
         fo.celltocorner(x[iw], self.work)
-        if island:
+        if island and self.first_time:
             # print('adding rhsp')
             self.work[:, :] -= self.rhsp
 
@@ -414,7 +414,6 @@ class Operators(Param):
                 verbose = True
             else:
                 verbose = False
-            self.first_time = False
             if (self.myrank == 0) and verbose:
                 print('-'*50)
                 print(' Convergence of the vorticity inversion')
@@ -430,10 +429,17 @@ class Operators(Param):
         # don't apply the fill_halo on it
         # [because fill_halo as it is is applying periodic BC]
         psi = psi*self.mskp
-        if island:
-            # print('adding psi')
+        if island and self.first_time:
+            # we set psi on the boundary values by adding
+            # self.psi (defined in island module)
+            # before that line, psi=0 along all boundaries
             psi += self.psi
+            # it should be added only if we invert for the total psi
+            # it should not be added if we compute the increment of psi
+            # TODO: make it more robust than a test on "first_time"
 
+        self.first_time = False
+            
         # compute (u,v) @ U,V points from psi @ cell corner
         fo.computeorthogradient(self.msk, psi, self.dx, self.dy, self.nh, u, v)
         # self.fill_halo(u)

@@ -97,7 +97,11 @@ class Plotting(object):
                                      self.ymin, self.ymax],
                              interpolation=self.imshow_interpolation)
 
-        plt.colorbar(self.im, ax=self.ax1)
+        if self.nx > self.ny*2:
+            orientation = 'horizontal'
+        else:
+            orientation = 'vertical'
+        plt.colorbar(self.im, ax=self.ax1, orientation=orientation)
 
         if self.plot_ua:
             self.Q = ax1.quiver(self.xQ, self.yQ,
