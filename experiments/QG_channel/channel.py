@@ -14,15 +14,15 @@ param.modelname = 'quasigeostrophic'
 param.expname = 'channel'
 
 # domain and resolution
-param.nx = 64*2
-param.ny = 64
+param.nx = 64*4
+param.ny = param.nx/4
 param.npy = 1
-param.Lx = 2.
-param.Ly = param.Lx/2
+param.Lx = 4.
+param.Ly = param.Lx/4
 param.geometry = 'xperio'
 
 # time
-param.tend = 200.
+param.tend = 1000.
 param.cfl = 1.2
 param.adaptable_dt = True
 param.dt = 1.
@@ -35,7 +35,7 @@ param.order = 5
 # output
 param.var_to_save = ['pv', 'u', 'v', 'psi', 'pvanom']
 param.list_diag = 'all'
-param.freq_his = 10
+param.freq_his = 20
 param.freq_diag = 5.
 
 # plot
@@ -49,7 +49,7 @@ param.generate_mp4 = False
 
 # physics
 param.beta = 1.
-param.Rd = 10*param.Lx/param.nx
+param.Rd = .1
 param.forcing = False
 param.forcing_module = 'forcing' # not yet implemented
 param.noslip = False
@@ -57,7 +57,6 @@ param.diffusion = False
 param.isisland=True
 
 psi0 = -5e-4 # this sets psi on the Northern wall (psi=0 on the Southern wall)
-
 
 grid = Grid(param)
 
@@ -95,17 +94,24 @@ f2d = Fluid2d(param, grid)
 model = f2d.model
 
 xr, yr = grid.xr, grid.yr
-vor = model.var.get('pv')
 
+pv = model.var.get('pv')
 
-
-# set an initial tracer field
-
-vor[:] = 1e-4*np.random.normal(size=np.shape(vor))*grid.msk
-y = vor[:]*1.
+# first, let's put some noise on the pv
+np.random.seed(1) # to ensure reproducibility of the results
+y = 1e-4*np.random.normal(size=np.shape(pv))*grid.msk
 model.ope.fill_halo(y)
-vor[:] = y
+pv[:] = y
 
+# to ensure that psi(y) varies linearly between the South and the North wall
+# the pv anomaly needs to be set to the correct value
+# since pvanom = d^2psi/dy^2 - Rd^-2 psi
+# we see that to have psi(y)=a*y we need to set
+# pvanom = -Rd^-2 * psi
+# this is what does the next line
+pv -= param.Rd**(-2) * psi0*yr/param.Ly*grid.msk
+
+# now we add the background planetary pv 'beta*y'
 model.add_backgroundpv()
 
 model.set_psi_from_pv()
