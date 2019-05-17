@@ -1,0 +1,41 @@
+# Markus Reinert, May 2019
+#
+# Fluid2d-experiment with EMS: wave breaking at the coast (experiment file)
+#
+# Refer to the documentation of `ems.parse_experiment_file` for a
+# detailed description of the format of experiment files.
+
+
+# Name of the experiment class.
+# If the name is changed, a new table is created in the database.
+Name: Breaking_Waves
+
+
+# Descriptions are optional.
+# They can go over multiple lines and can also contain empty lines.
+Description: Simulate interface waves, their propagation and breaking at a sloping coast.
+Various parameters can be modified in this file.
+
+
+# Here are the parameters that we want to modify in this class of experiments.
+# Parameters which we intend to keep constant are in the Python file.
+Parameters:
+
+### Physics
+# activate or deactivate diffusion
+bool diffusion False
+# diffusion coefficient (if diffusion is True)
+float Kdiff 1e-2
+
+### Coast
+float slope 0.5
+float height 1.05
+# beginning of the flat coast
+float x_start 4.0
+
+### Initial Condition
+# perturbation can be of type "sin" or "gauss"
+str perturbation gauss
+# height and width of the perturbation
+float intensity  0.5
+float sigma      0.3
