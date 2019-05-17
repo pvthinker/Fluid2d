@@ -114,22 +114,22 @@ class EMS:
             else:
                 # Create a new table
                 print(' Creating new table "{}".'.format(self.exp_class))
-                param_string = ", ".join(['"{}" {}'.format(n, t) for t, n, v in param_list])
-                sql_command = 'CREATE TABLE "{}" ({})'.format(self.exp_class, param_string)
+                column_string = ", ".join(['"{}" {}'.format(n, t) for t, n, v in param_list])
+                sql_command = 'CREATE TABLE "{}" ({})'.format(self.exp_class, column_string)
                 cursor.execute(sql_command)
-                # TODO: make string formating safe against SQL injection,
-                #       possibly by using the "?"-format
                 # First entry has index 1 (one)
                 self.id_ = 1
             # Set id in the parameter list
             param_list[0][2] = self.id_
             # Add a new entry to the table
             print(' Adding new entry #{} to table "{}".'.format(self.id_, self.exp_class))
-            value_string = ", ".join(['"{}"'.format(v) for t, n, v in param_list])
-            sql_command = 'INSERT INTO "{}" VALUES ({})'.format(self.exp_class, value_string)
-            cursor.execute(sql_command)
-            # TODO: make string formating safe against SQL injection,
-            #       possibly by using the "?"-format
+            value_list = [v for t, n, v in param_list]
+            sql_command = (
+                'INSERT INTO "{}" VALUES ('.format(self.exp_class)
+                + ', '.join(['?'] * len(value_list))
+                + ')'
+            )
+            cursor.execute(sql_command, value_list)
             # Save the database
             self.connection.commit()
             # Set the name of the experiment
@@ -254,7 +254,7 @@ def parse_experiment_file(path: str):
 
     The name is written in a line starting with "Name:".  It must be a
     valid string to be used as a filename;  in particular, it must not
-    contain the slash "/".
+    contain the slash (/) or the quotation mark (").
 
     The description begins in or after a line starting with
     "Description:" and goes until the beginning of the parameters
@@ -265,8 +265,8 @@ def parse_experiment_file(path: str):
     datatype, the name and the value of the parameter seperated by one
     or several whitespaces.
     The datatype must be one of "int", "float", "bool" or "str".
-    The name must not contain whitespace characters and must not be in
-    the list of reserved column names.
+    The name must not contain whitespace characters or quotation marks
+    and must not be in the list of reserved column names.
     The value must be a valid value for the given datatype.  If the
     value is omitted, it defaults to zero for numbers, True for booleans
     and the empty string for strings.  The values "True" and "False" can
@@ -298,6 +298,8 @@ def parse_experiment_file(path: str):
         elif line.lower().startswith("name:"):
             if not name:
                 name = line[5:]
+                if '"' in name:
+                    raise ExpFileError('name must not contain the symbol ".')
             else:
                 raise ExpFileError(
                     "name defined more than once in file {}.".format(path)
@@ -375,6 +377,11 @@ def parse_experiment_file(path: str):
                 raise ExpFileError(
                     'reserved name used for parameter "{}" in file {}.'
                     .format(param_name, path)
+                )
+            if '"' in param_name:
+                raise ExpFileError(
+                    'name of parameter "{}" must not contain the symbol ".'
+                    .format(param_name)
                 )
             param_list.append([sql_type, param_name, param_value])
         else:
