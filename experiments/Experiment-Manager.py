@@ -10,9 +10,13 @@ import os
 import sys
 import cmd
 import sqlite3 as dbsys
+import subprocess
 
 
+# Command to open mp4-files
 MP4_PLAYER = "mplayer"
+# Command to open NetCDF (his or diag) files
+NETCDF_VIEWER = "ncview"
 
 
 class EMDBConnection:
@@ -30,14 +34,22 @@ class EMDBConnection:
         # This gives a list like that: [('table1',), ('table2',)]
         self.tables = [EMDBTable(cursor, t[0]) for t in cursor.fetchall()]
 
-    def show_table_overview(self, title=True):
-        if title:
-            print("Experiments in database:")
-        for table in self.tables:
-            print(
-                " - {}: {} experiments, {} columns"
-                .format(table.name, table.get_length(), len(table.columns))
-            )
+    def __del__(self):
+        print("Closing database.")
+        print("-"*50)
+        self.connection.close()
+
+    def get_table_overview(self):
+        if self.tables:
+            text = "Experiments in database:"
+            for table in self.tables:
+                text += (
+                    "\n - {}: {} experiments, {} columns"
+                    .format(table.name, table.get_length(), len(table.columns))
+                )
+        else:
+            text = "No experiments in database."
+        return text
 
     def show_full_tables(self):
         print("-"*50)
@@ -149,8 +161,6 @@ class EMShell(cmd.Cmd):
     
     intro = (
         "-" * 50
-        + "\nFluid2d Experiment Management System (EMS)\n"
-        + "-" * 50
         + "\nType help or ? to list available commands."
         + "\nType exit or Ctrl+D or Ctrl+C to exit."
         + "\nPress Tab-key for auto-completion of commands or table names.\n"
@@ -159,11 +169,45 @@ class EMShell(cmd.Cmd):
 
     def __init__(self, experiments_dir: str):
         super().__init__()
+        print("-"*50)
+        print("Fluid2d Experiment Management System (EMS)")
         self.exp_dir = experiments_dir
         self.con = EMDBConnection(os.path.join(self.exp_dir, "experiments.db"))
+        self.intro += "\n" + self.con.get_table_overview() + "\n"
         self.selected_table = ""
+        self.silent_mode = True
+
+    ### Functionality to MODIFY how the programme acts
+    def do_verbose(self, params):
+        if params == "" or params.lower() == "on":
+            self.silent_mode = False
+        elif params.lower() == "off":
+            self.silent_mode = True
+        else:
+            print('Unknown parameter.  Please use "verbose on" or "verbose off".')
+
+    def complete_verbose(self, text, line, begidx, endidx):
+        if text == "" or text == "o":
+            return ["on", "off"]
+        if text == "of":
+            return ["off",]
+
+    def help_verbose(self):
+        print(
+            "Toggle between verbose- and silent-mode.\n"
+            'Use "verbose on" or "verbose" to see the output of external programmes '
+            'started from this shell.\n'
+            'Use "verbose off" to hide all output of external programmes (default).\n'
+            'No error message is displayed in silent-mode when the opening of a file fails.\n'
+            'In any case, external programmes are started in the background, so the shell can '
+            'still be used, even if the input prompt is polluted.'
+        )
 
     ### Functionality to SHOW the content of the database
+    def do_list(self, params):
+        """List all experiment classes (tables) in the database."""
+        print(self.con.get_table_overview())
+
     def do_show(self, table_name):
         """Show the content of a table.
 
@@ -203,10 +247,17 @@ class EMShell(cmd.Cmd):
         else:
             print("No mp4-file found in folder:", dir_)    
         path = os.path.join(self.exp_dir, expname, f)
-        os.system('{} "{}" &'.format(MP4_PLAYER, path))
+        self.open_file(MP4_PLAYER, path)
 
     def complete_open_mp4(self, text, line, begidx, endidx):
         return self.table_name_completion(text)
+
+    def help_open_mp4(self):
+        print("Open the mp4-file for an experiment specified by its name and ID.\n"
+              "It is not possible to interact with the video player via input in the shell, "
+              "for example with mplayer.\n"
+              "User input via the graphical interface is not affected by this."
+        )
 
     def do_open_his(self, params):
         """Open the his-file for an experiment specified by its name and ID."""
@@ -217,7 +268,7 @@ class EMShell(cmd.Cmd):
         if not os.path.isfile(path):
             print("File does not exist:", path)
             return
-        os.system('ncview "{}" &'.format(path))
+        self.open_file(NETCDF_VIEWER, path)
 
     def complete_open_his(self, text, line, begidx, endidx):
         return self.table_name_completion(text)
@@ -231,7 +282,7 @@ class EMShell(cmd.Cmd):
         if not os.path.isfile(path):
             print("File does not exist:", path)
             return
-        os.system('ncview "{}" &'.format(path))
+        self.open_file(NETCDF_VIEWER, path)
 
     def complete_open_diag(self, text, line, begidx, endidx):
         return self.table_name_completion(text)
@@ -272,7 +323,7 @@ class EMShell(cmd.Cmd):
 
     ### Behaviour for empty input
     def emptyline(self):
-        self.con.show_table_overview()
+        pass
 
     ### Helper functions
     def table_name_completion(self, text):
@@ -319,6 +370,25 @@ class EMShell(cmd.Cmd):
             return
         # Return name of experiment folder
         return "{}_{:03}".format(name, id_)
+
+    def open_file(self, command, path):
+        if self.silent_mode:
+            print("Opening file {} with {} in silent-mode.".format(path, command))
+            subprocess.Popen(
+                [command, path],
+                # Disable standard input via the shell, for example with mplayer.
+                stdin=subprocess.DEVNULL,
+                # Throw away output and error messages.
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        else:
+            print("Opening file {} with {} in verbose-mode.".format(path, command))
+            subprocess.Popen(
+                [command, path],
+                # Disable standard input via the shell, for example with mplayer.
+                stdin=subprocess.DEVNULL,
+            )
 
 
 if len(sys.argv) == 1:
