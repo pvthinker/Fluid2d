@@ -18,6 +18,24 @@ MP4_PLAYER = "mplayer"
 # Command to open NetCDF (his or diag) files
 NETCDF_VIEWER = "ncview"
 
+# Settings for the output of a table
+COMMENT_MAX_LENGTH = 21
+FLOAT_FORMAT = "{:.4f}"
+LIMITER = "  "
+
+# Hide specific information in the table
+# The values of the following variables can be modified
+# with "enable" and "disable" during runtime.
+HIDE_COMMENT = False
+HIDE_MP4_SIZE = False
+HIDE_HIS_SIZE = False
+HIDE_DIAG_SIZE = True
+HIDE_FLUX_SIZE = True
+HIDE_TOTAL_SIZE = False
+HIDE_DATETIME = False
+# If HIDE_DATETIME is True, the following 2 have no effect
+HIDE_YEAR = False
+HIDE_SECONDS = True
 
 class EMDBConnection:
     """Experiment Management Database Connection"""
@@ -66,6 +84,20 @@ class EMDBConnection:
                 return True
         return False
 
+    def show_filtered_table(self, table_name, statement):
+        for table in self.tables:
+            if table.name == table_name or table_name == "":
+                print("-"*50)
+                table.print_selection(statement)
+        print("-"*50)
+
+    def show_sorted_table(self, table_name, statement):
+        for table in self.tables:
+            if table.name == table_name or table_name == "":
+                print("-"*50)
+                table.print_sorted(statement)
+        print("-"*50)
+
 
 class EMDBTable:
     """Experiment Management Database Table"""
@@ -79,70 +111,9 @@ class EMDBTable:
         # column[0]: index from 0, column[1]: name, column[2]: type
 
     def __str__(self):
-        COMMENT_MAX_LENGTH = 15
-        LIMITER = "  "
-        CUT_DATE = False
-        # If CUT_DATE is True, CUT_MONTH is ignored
-        CUT_MONTH = True
-        # If CUT_MONTH is True, CUT_YEAR is ignored
-        CUT_YEAR = False
-        CUT_SECONDS = True
         # Get entries
         self.c.execute('SELECT * from "{}"'.format(self.name))
-        rows = [list(row) for row in self.c.fetchall()]
-        lengths = [len(c[0]) if c[0] != "comment" else COMMENT_MAX_LENGTH
-                   for c in self.columns]
-        table_size = 0
-        for row in rows:
-            for i, val in enumerate(row):
-                # Check name of column
-                if self.columns[i][0] == "comment":
-                    # Cut comments that are too long and end them with an ellipsis
-                    if len(val) > COMMENT_MAX_LENGTH:
-                        row[i] = val[:COMMENT_MAX_LENGTH-1] + "…"
-                    # No need to determine length of value
-                    continue
-                elif self.columns[i][0] == "datetime":
-                    if CUT_DATE:
-                        val = val.split("T")[1]
-                    elif CUT_MONTH:
-                        val = val[8:]
-                    elif CUT_YEAR:
-                        val = val[5:]
-                    if CUT_SECONDS:
-                        val = val[:-10]
-                    val = val.replace("T", ",")
-                    row[i] = val
-                elif self.columns[i][0] == "size_total":
-                    table_size += val
-
-                # Check type of column
-                if self.columns[i][1] == "TEXT" or self.columns[i][1] == "INTEGER":
-                    lengths[i] = max(len(str(val)), lengths[i])
-                elif self.columns[i][1] == "REAL":
-                    lengths[i] = max(len("{:.3f}".format(val)), lengths[i])
-                else:
-                    raise Exception(
-                        "unknown type {} of column {} in table {}."
-                        .format(*self.columns[i], self.name)
-                    )
-        text = "Experiment: " + self.name + " ({:.3f} MB)\n".format(table_size)
-        text_cols = []
-        for i, (n, t) in enumerate(self.columns):
-            text_cols.append(("{:^" + str(lengths[i]) + "}").format(n))
-        text += LIMITER.join(text_cols) + "\n"
-        format_strings = []
-        for i, l in enumerate(lengths):
-            if self.columns[i][1] == "REAL":
-                format_strings.append("{:^" + str(l) + ".3f}")
-            elif self.columns[i][0] == "comment":
-                format_strings.append("{:" + str(l) + "}")
-            else:
-                format_strings.append("{:^" + str(l) + "}")
-        for row in rows:
-            text_cols = [f_str.format(val) for f_str, val in zip(format_strings, row)]
-            text += LIMITER.join(text_cols) + "\n"
-        return text.strip()
+        return string_format_table(self.c.fetchall(), self.columns, self.name)
 
     def get_length(self):
         self.c.execute('SELECT Count(*) FROM "{}"'.format(self.name))
@@ -154,6 +125,24 @@ class EMDBTable:
             return True
         return False
 
+    def print_selection(self, statement):
+        try:
+            self.c.execute('SELECT * FROM "{}" WHERE {}'
+                           .format(self.name, statement))
+        except dbsys.OperationalError as e:
+            print('SQL error for experiment "{}":'.format(self.name), e)
+        else:
+            print(string_format_table(self.c.fetchall(), self.columns, self.name))
+
+    def print_sorted(self, statement):
+        try:
+            self.c.execute('SELECT * FROM "{}" ORDER BY {}'
+                           .format(self.name, statement))
+        except dbsys.OperationalError as e:
+            print('SQL error for experiment "{}":'.format(self.name), e)
+        else:
+            print(string_format_table(self.c.fetchall(), self.columns, self.name))
+
 
 # https://docs.python.org/3/library/cmd.html
 class EMShell(cmd.Cmd):
@@ -163,7 +152,7 @@ class EMShell(cmd.Cmd):
         "-" * 50
         + "\nType help or ? to list available commands."
         + "\nType exit or Ctrl+D or Ctrl+C to exit."
-        + "\nPress Tab-key for auto-completion of commands or table names.\n"
+        + "\nPress Tab-key for auto-completion of commands, table names or column names."
     )
     prompt = "(EMS) "
 
@@ -203,6 +192,125 @@ class EMShell(cmd.Cmd):
             'still be used, even if the input prompt is polluted.'
         )
 
+    def do_enable(self, params):
+        global HIDE_COMMENT
+        global HIDE_MP4_SIZE, HIDE_HIS_SIZE, HIDE_DIAG_SIZE, HIDE_FLUX_SIZE, HIDE_TOTAL_SIZE
+        global HIDE_DATETIME, HIDE_YEAR, HIDE_SECONDS
+
+        params = params.lower()
+
+        if params == "all":
+            HIDE_COMMENT = False
+            HIDE_MP4_SIZE = False
+            HIDE_HIS_SIZE = False
+            HIDE_DIAG_SIZE = False
+            HIDE_FLUX_SIZE = False
+            HIDE_TOTAL_SIZE = False
+            HIDE_DATETIME = False
+            HIDE_YEAR = False
+            HIDE_SECONDS = False
+        elif params == "size":
+            HIDE_MP4_SIZE = False
+            HIDE_HIS_SIZE = False
+            HIDE_DIAG_SIZE = False
+            HIDE_FLUX_SIZE = False
+            HIDE_TOTAL_SIZE = False
+        elif params == "size_mp4":
+            HIDE_MP4_SIZE = False
+        elif params == "size_his":
+            HIDE_HIS_SIZE = False
+        elif params == "size_diag":
+            HIDE_DIAG_SIZE = False
+        elif params == "size_flux":
+            HIDE_FLUX_SIZE = False
+        elif params == "size_total":
+            HIDE_TOTAL_SIZE = False
+        elif params == "datetime":
+            HIDE_DATETIME = False
+        elif params == "year":
+            HIDE_YEAR = False
+        elif params == "seconds":
+            HIDE_SECONDS = False
+        elif params == "comment":
+            HIDE_COMMENT = False
+        else:
+            print("Unknown argument.")
+
+    def complete_enable(self, text, line, begidx, endidx):
+        parameters = [
+            'comment',
+            'size',
+            'size_mp4',
+            'size_his',
+            'size_diag',
+            'size_flux',
+            'size_total',
+            'datetime',
+            'year',
+            'seconds',
+        ]
+        completions = []
+        for p in parameters:
+            if p.startswith(text):
+                completions.append(p)
+        return completions
+
+    def help_enable(self):
+        print(
+            'Show hidden information in the experiment table.\n'
+            'Use "enable all" to show all available information.\n'
+            'See the help of "disable" for further explanations.'
+        )
+
+    def do_disable(self, params):
+        global HIDE_COMMENT
+        global HIDE_MP4_SIZE, HIDE_HIS_SIZE, HIDE_DIAG_SIZE, HIDE_FLUX_SIZE, HIDE_TOTAL_SIZE
+        global HIDE_DATETIME, HIDE_YEAR, HIDE_SECONDS
+
+        params = params.lower()
+
+        if params == "size":
+            HIDE_MP4_SIZE = True
+            HIDE_HIS_SIZE = True
+            HIDE_DIAG_SIZE = True
+            HIDE_FLUX_SIZE = True
+            HIDE_TOTAL_SIZE = True
+        elif params == "size_mp4":
+            HIDE_MP4_SIZE = True
+        elif params == "size_his":
+            HIDE_HIS_SIZE = True
+        elif params == "size_diag":
+            HIDE_DIAG_SIZE = True
+        elif params == "size_flux":
+            HIDE_FLUX_SIZE = True
+        elif params == "size_total":
+            HIDE_TOTAL_SIZE = True
+        elif params == "datetime":
+            HIDE_DATETIME = True
+        elif params == "year":
+            HIDE_YEAR = True
+        elif params == "seconds":
+            HIDE_SECONDS = True
+        if params == "comment":
+            HIDE_COMMENT = True
+        else:
+            print("Unknown argument.")
+
+    def complete_disable(self, text, line, begidx, endidx):
+        return self.complete_enable(text, line, begidx, endidx)
+
+    def help_disable(self):
+        print(
+            'Hide unnecessary information in the experiment table.\n'
+            'The following parameters can be hidden:\n'
+            ' - datetime, size_total, size_mp4, size_his, size_diag, size_flux, comment\n'
+            'Furthermore, the shorthand "size" can be used to disable at once '
+            'size_total, size_mp4, size_his, size_diag and size_flux.\n'
+            'When datetime is not disabled, the commands "disable year" and "disable seconds" '
+            'can be used to make the datetime column slimmer.\n'
+            'To show the parameters again, use "enable".'
+        )
+
     ### Functionality to SHOW the content of the database
     def do_list(self, params):
         """List all experiment classes (tables) in the database."""
@@ -232,6 +340,48 @@ class EMShell(cmd.Cmd):
             "Show all information in the database about a class of experiments.\n"
             "If no experiment is specified and no experiment is selected, "
             "information about all the experiments is shown."
+        )
+
+    def do_filter(self, params):
+        self.con.show_filtered_table(self.selected_table, params)
+
+    def complete_filter(self, text, line, begidx, endidx):
+        return self.column_name_completion(self.selected_table, text)
+
+    def help_filter(self):
+        print(
+            'Filter experiments by the given value of a given parameter.\n'
+            'Any valid SQLite WHERE-statement can be used as a filter, for example:\n'
+            ' - filter intensity <= 0.2\n'
+            ' - filter slope = 0.5\n'
+            ' - filter diffusion = "True"\n'
+            ' - filter perturbation = "gauss" AND duration > 20\n'
+            'It is necessary to put the value for string or boolean arguments in quotation '
+            'marks like this: "True", "False", "Some text".\n'
+            'Quotation marks are also necessary if the name of the parameter contains '
+            'whitespace.\n'
+            'To sort the experiments, use "sort".\n'
+            'To filter and sort the experiments, use SQLite syntax.\n'
+            'Examples:\n'
+            ' - filter intensity > 0.1 ORDER BY intensity\n'
+            ' - filter perturbation != "gauss" ORDER BY size_total DESC'
+        )
+
+    def do_sort(self, params):
+        self.con.show_sorted_table(self.selected_table, params)
+
+    def complete_sort(self, text, line, begidx, endidx):
+        return self.column_name_completion(self.selected_table, text)
+
+    def help_sort(self):
+        print(
+            'Sort the experiments by the value of a given parameter.\n'
+            'To invert the order, add "desc" (descending) to the command.\n'
+            'Example usages:\n'
+            ' - sort intensity: show experiments with lowest intensity on top of the table.\n'
+            ' - sort size_total desc: show experiments with biggest file size on top.\n'
+            'Quotation marks are necessary if the name of the parameter contains whitespace.\n'
+            'To filter and sort the experiments, see the help of "filter".'
         )
 
     ### Functionality to OPEN experiment files
@@ -333,6 +483,15 @@ class EMShell(cmd.Cmd):
                 completions.append(table.name)
         return completions
 
+    def column_name_completion(self, table_name, text):
+        completions = []
+        for table in self.con.tables:
+            if table.name == table_name or table_name == "":
+                for column_name, column_type in table.columns:
+                    if column_name.startswith(text):
+                        completions.append(column_name)
+        return completions
+
     def check_table_exists(self, name):
         return name in [table.name for table in self.con.tables]
 
@@ -389,6 +548,100 @@ class EMShell(cmd.Cmd):
                 # Disable standard input via the shell, for example with mplayer.
                 stdin=subprocess.DEVNULL,
             )
+
+
+def string_format_table(rows, columns, table_name):
+    # Convert rows to list of lists (since fetchall() returns a list of tuples)
+    rows = [list(row) for row in rows]
+    columns = columns.copy()
+    # Remove ignored columns
+    remove_indices = []
+    for i in range(len(columns)):
+        if (
+            (HIDE_COMMENT and columns[i][0] == "comment") or
+            (HIDE_DATETIME and columns[i][0] == "datetime") or
+            (HIDE_MP4_SIZE and columns[i][0] == "size_mp4") or
+            (HIDE_HIS_SIZE and columns[i][0] == "size_his") or
+            (HIDE_DIAG_SIZE and columns[i][0] == "size_diag") or
+            (HIDE_FLUX_SIZE and columns[i][0] == "size_flux") or
+            (HIDE_TOTAL_SIZE and columns[i][0] == "size_total")
+        ):
+            remove_indices.append(i)
+    for i in sorted(remove_indices, reverse=True):
+        columns.pop(i)
+        for row in rows:
+            row.pop(i)
+    # To calculate the total size of the files associated with the table
+    table_size = 0
+    # Get necessary length for each column and process table
+    lengths = [len(n) for n, t in columns]
+    for row in rows:
+        for i, val in enumerate(row):
+            # Check name of column
+            if columns[i][0] == "comment":
+                # Cut comments which are too long and end them with an ellipsis
+                if len(val) > COMMENT_MAX_LENGTH:
+                    val = val[:COMMENT_MAX_LENGTH-1] + "…"
+                    row[i] = val
+            elif columns[i][0] == "datetime":
+                # Cut unnecessary parts of the date and time
+                if HIDE_YEAR:
+                    val = val[5:]
+                if HIDE_SECONDS:
+                    val = val[:-10]
+                row[i] = val.replace('T', ',')
+            elif columns[i][0] == "size_total":
+                if val > 0:
+                    table_size += val
+
+            # Check type of column and adopt
+            if columns[i][1] == "TEXT" or columns[i][1] == "INTEGER":
+                lengths[i] = max(lengths[i], len(str(val)))
+            elif columns[i][0] in ["size_diag", "size_flux", "size_his",
+                                   "size_mp4", "size_total"]:
+                lengths[i] = max(lengths[i], len("{:.3f}".format(val)))
+            elif columns[i][1] == "REAL":
+                lengths[i] = max(lengths[i], len(FLOAT_FORMAT.format(val)))
+            else:
+                # This is an unexpected situation, which probably means that
+                # sqlite3 does not work as it was, when this script was written.
+                raise Exception(
+                    "unknown type {} of column {} in table {}."
+                    .format(*columns[i], table_name)
+                )
+    # Create top line of the text to be returned
+    text = "Experiment: " + table_name
+    if not HIDE_TOTAL_SIZE:
+        text += " ({:.3f} MB)".format(table_size)
+    if len(remove_indices) == 1:
+        text += " (1 parameter hidden)"
+    elif len(remove_indices) > 1:
+        text += " ({} parameters hidden)".format(len(remove_indices))
+    text += "\n"
+    # Add column name
+    text += LIMITER.join([
+        ("{:^" + str(l) + "}").format(n)
+        for (n, t), l in zip(columns, lengths)
+    ]) + "\n"
+    format_strings = []
+    for (n, t), l in zip(columns, lengths):
+        # Numbers right justified,
+        # comments left justified,
+        # text centered
+        if n in ["size_diag", "size_flux", "size_his", "size_mp4", "size_total"]:
+            format_strings.append("{:>" + str(l) + ".3f}")
+        elif t == "REAL":
+            format_strings.append(FLOAT_FORMAT.replace(":", ":>"+str(l)))
+        elif t == "INTEGER":
+            format_strings.append("{:>" + str(l) + "}")
+        elif n == "comment":
+            format_strings.append("{:" + str(l) + "}")
+        else:
+            format_strings.append("{:^" + str(l) + "}")
+    for row in rows:
+        text_cols = [f_str.format(val) for f_str, val in zip(format_strings, row)]
+        text += LIMITER.join(text_cols) + "\n"
+    return text.strip()
 
 
 if len(sys.argv) == 1:
