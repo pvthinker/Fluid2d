@@ -23,19 +23,14 @@ COMMENT_MAX_LENGTH = 21
 FLOAT_FORMAT = "{:.4f}"
 LIMITER = "  "
 
-# Hide specific information in the table
-# The values of the following variables can be modified
-# with "enable" and "disable" during runtime.
-HIDE_COMMENT = False
-HIDE_MP4_SIZE = False
-HIDE_HIS_SIZE = False
-HIDE_DIAG_SIZE = True
-HIDE_FLUX_SIZE = True
-HIDE_TOTAL_SIZE = False
-HIDE_DATETIME = False
-# If HIDE_DATETIME is True, the following 2 have no effect
-HIDE_YEAR = False
-HIDE_SECONDS = True
+# Hide the following information in the table
+# They can be activated with "enable" during runtime.
+# More information can be hidden with "disable".
+hidden_information = {
+    'size_diag',
+    'size_flux',
+    'datetime_seconds',
+}
 
 class EMDBConnection:
     """Experiment Management Database Connection"""
@@ -98,6 +93,13 @@ class EMDBConnection:
                 table.print_sorted(statement)
         print("-"*50)
 
+    def is_valid_column(self, name):
+        for table in self.tables:
+            for n, t in table.columns:
+                if name == n:
+                    return True
+        return False
+
 
 class EMDBTable:
     """Experiment Management Database Table"""
@@ -113,7 +115,7 @@ class EMDBTable:
     def __str__(self):
         # Get entries
         self.c.execute('SELECT * from "{}"'.format(self.name))
-        return string_format_table(self.c.fetchall(), self.columns, self.name)
+        return string_format_table(self.name, self.columns, self.c.fetchall())
 
     def get_length(self):
         self.c.execute('SELECT Count(*) FROM "{}"'.format(self.name))
@@ -132,7 +134,7 @@ class EMDBTable:
         except dbsys.OperationalError as e:
             print('SQL error for experiment "{}":'.format(self.name), e)
         else:
-            print(string_format_table(self.c.fetchall(), self.columns, self.name))
+            print(string_format_table(self.name, self.columns, self.c.fetchall()))
 
     def print_sorted(self, statement):
         try:
@@ -141,7 +143,7 @@ class EMDBTable:
         except dbsys.OperationalError as e:
             print('SQL error for experiment "{}":'.format(self.name), e)
         else:
-            print(string_format_table(self.c.fetchall(), self.columns, self.name))
+            print(string_format_table(self.name, self.columns, self.c.fetchall()))
 
 
 # https://docs.python.org/3/library/cmd.html
@@ -153,6 +155,7 @@ class EMShell(cmd.Cmd):
         + "\nType help or ? to list available commands."
         + "\nType exit or Ctrl+D or Ctrl+C to exit."
         + "\nPress Tab-key for auto-completion of commands, table names or column names."
+        + "\n"
     )
     prompt = "(EMS) "
 
@@ -193,62 +196,25 @@ class EMShell(cmd.Cmd):
         )
 
     def do_enable(self, params):
-        global HIDE_COMMENT
-        global HIDE_MP4_SIZE, HIDE_HIS_SIZE, HIDE_DIAG_SIZE, HIDE_FLUX_SIZE, HIDE_TOTAL_SIZE
-        global HIDE_DATETIME, HIDE_YEAR, HIDE_SECONDS
-
-        params = params.lower()
-
+        global hidden_information
         if params == "all":
-            HIDE_COMMENT = False
-            HIDE_MP4_SIZE = False
-            HIDE_HIS_SIZE = False
-            HIDE_DIAG_SIZE = False
-            HIDE_FLUX_SIZE = False
-            HIDE_TOTAL_SIZE = False
-            HIDE_DATETIME = False
-            HIDE_YEAR = False
-            HIDE_SECONDS = False
-        elif params == "size":
-            HIDE_MP4_SIZE = False
-            HIDE_HIS_SIZE = False
-            HIDE_DIAG_SIZE = False
-            HIDE_FLUX_SIZE = False
-            HIDE_TOTAL_SIZE = False
-        elif params == "size_mp4":
-            HIDE_MP4_SIZE = False
-        elif params == "size_his":
-            HIDE_HIS_SIZE = False
-        elif params == "size_diag":
-            HIDE_DIAG_SIZE = False
-        elif params == "size_flux":
-            HIDE_FLUX_SIZE = False
-        elif params == "size_total":
-            HIDE_TOTAL_SIZE = False
-        elif params == "datetime":
-            HIDE_DATETIME = False
-        elif params == "year":
-            HIDE_YEAR = False
-        elif params == "seconds":
-            HIDE_SECONDS = False
-        elif params == "comment":
-            HIDE_COMMENT = False
+            hidden_information.clear()
         else:
-            print("Unknown argument.")
+            for param in params.split():
+                if param == "size":
+                    hidden_information.difference_update(
+                        {'size_diag', 'size_flux', 'size_his', 'size_mp4', 'size_total'}
+                    )
+                else:
+                    hidden_information.discard(param)
 
     def complete_enable(self, text, line, begidx, endidx):
-        parameters = [
-            'comment',
-            'size',
-            'size_mp4',
-            'size_his',
-            'size_diag',
-            'size_flux',
-            'size_total',
-            'datetime',
-            'year',
-            'seconds',
-        ]
+        parameters = hidden_information.copy()
+        if len(parameters) > 0:
+            parameters.add('all')
+        if not parameters.isdisjoint({'size_diag', 'size_flux', 'size_his',
+                                      'size_mp4', 'size_total'}):
+            parameters.add('size')
         completions = []
         for p in parameters:
             if p.startswith(text):
@@ -257,58 +223,57 @@ class EMShell(cmd.Cmd):
 
     def help_enable(self):
         print(
-            'Show hidden information in the experiment table.\n'
-            'Use "enable all" to show all available information.\n'
+            'Make hidden information in the experiment table visible.\n'
             'See the help of "disable" for further explanations.'
         )
 
     def do_disable(self, params):
-        global HIDE_COMMENT
-        global HIDE_MP4_SIZE, HIDE_HIS_SIZE, HIDE_DIAG_SIZE, HIDE_FLUX_SIZE, HIDE_TOTAL_SIZE
-        global HIDE_DATETIME, HIDE_YEAR, HIDE_SECONDS
-
-        params = params.lower()
-
-        if params == "size":
-            HIDE_MP4_SIZE = True
-            HIDE_HIS_SIZE = True
-            HIDE_DIAG_SIZE = True
-            HIDE_FLUX_SIZE = True
-            HIDE_TOTAL_SIZE = True
-        elif params == "size_mp4":
-            HIDE_MP4_SIZE = True
-        elif params == "size_his":
-            HIDE_HIS_SIZE = True
-        elif params == "size_diag":
-            HIDE_DIAG_SIZE = True
-        elif params == "size_flux":
-            HIDE_FLUX_SIZE = True
-        elif params == "size_total":
-            HIDE_TOTAL_SIZE = True
-        elif params == "datetime":
-            HIDE_DATETIME = True
-        elif params == "year":
-            HIDE_YEAR = True
-        elif params == "seconds":
-            HIDE_SECONDS = True
-        if params == "comment":
-            HIDE_COMMENT = True
-        else:
-            print("Unknown argument.")
+        global hidden_information
+        for param in params.split():
+            if param == "size":
+                # Short notation for the union of two sets
+                hidden_information |= {'size_diag', 'size_flux', 'size_his',
+                                       'size_mp4', 'size_total'}
+            elif (param == "datetime_year"
+                  or param == "datetime_seconds"
+                  or self.con.is_valid_column(param)
+            ):
+                hidden_information.add(param)
+            else:
+                print("Unknown argument:", param)
 
     def complete_disable(self, text, line, begidx, endidx):
-        return self.complete_enable(text, line, begidx, endidx)
+        parameters = [
+            'datetime_year',
+            'datetime_seconds',
+        ]
+        # If not all size columns are hidden, add shorthand for all sizes
+        if not hidden_information.issuperset({'size_diag', 'size_flux', 'size_his',
+                                              'size_mp4', 'size_total'}):
+            parameters += ['size']
+        # Add columns of selected table to the list of auto-completions
+        for table in self.con.tables:
+            if self.selected_table == "" or self.selected_table == table.name:
+                parameters += [n for n,t in table.columns]
+        completions = []
+        for p in parameters:
+            if p.startswith(text) and p not in hidden_information:
+                completions.append(p)
+        return completions
 
     def help_disable(self):
         print(
-            'Hide unnecessary information in the experiment table.\n'
-            'The following parameters can be hidden:\n'
-            ' - datetime, size_total, size_mp4, size_his, size_diag, size_flux, comment\n'
-            'Furthermore, the shorthand "size" can be used to disable at once '
-            'size_total, size_mp4, size_his, size_diag and size_flux.\n'
-            'When datetime is not disabled, the commands "disable year" and "disable seconds" '
-            'can be used to make the datetime column slimmer.\n'
-            'To show the parameters again, use "enable".'
+            'Hide unneeded information in the experiment table.\n'
+            'Every parameter/column can be hidden, for example:\n'
+            ' - disable comment\n'
+            'Furthermore, the year and number of seconds can be hidden from the datetime '
+            'column by using "disable datetime_year" and "disable datetime_seconds".\n'
+            'Multiple parameters can be specified at once, for example:\n'
+            ' - disable size_his size_diag size_flux\n'
+            'To hide all file sizes, use "disable size".\n'
+            'To show hidden parameters again, use "enable".\n'
+            'In addition to the behaviour described here, it also supports the command '
+            '"enable all".'
         )
 
     ### Functionality to SHOW the content of the database
@@ -550,24 +515,16 @@ class EMShell(cmd.Cmd):
             )
 
 
-def string_format_table(rows, columns, table_name):
+def string_format_table(table_name, columns, rows):
     # Convert rows to list of lists (since fetchall() returns a list of tuples)
     rows = [list(row) for row in rows]
     columns = columns.copy()
     # Remove ignored columns
-    remove_indices = []
-    for i in range(len(columns)):
-        if (
-            (HIDE_COMMENT and columns[i][0] == "comment") or
-            (HIDE_DATETIME and columns[i][0] == "datetime") or
-            (HIDE_MP4_SIZE and columns[i][0] == "size_mp4") or
-            (HIDE_HIS_SIZE and columns[i][0] == "size_his") or
-            (HIDE_DIAG_SIZE and columns[i][0] == "size_diag") or
-            (HIDE_FLUX_SIZE and columns[i][0] == "size_flux") or
-            (HIDE_TOTAL_SIZE and columns[i][0] == "size_total")
-        ):
-            remove_indices.append(i)
-    for i in sorted(remove_indices, reverse=True):
+    indices_to_remove = []
+    for i, (n, t) in enumerate(columns):
+        if n in hidden_information:
+            indices_to_remove.append(i)
+    for i in sorted(indices_to_remove, reverse=True):
         columns.pop(i)
         for row in rows:
             row.pop(i)
@@ -585,9 +542,9 @@ def string_format_table(rows, columns, table_name):
                     row[i] = val
             elif columns[i][0] == "datetime":
                 # Cut unnecessary parts of the date and time
-                if HIDE_YEAR:
+                if "datetime_year" in hidden_information:
                     val = val[5:]
-                if HIDE_SECONDS:
+                if "datetime_seconds" in hidden_information:
                     val = val[:-10]
                 row[i] = val.replace('T', ',')
             elif columns[i][0] == "size_total":
@@ -611,12 +568,12 @@ def string_format_table(rows, columns, table_name):
                 )
     # Create top line of the text to be returned
     text = "Experiment: " + table_name
-    if not HIDE_TOTAL_SIZE:
+    if "size_total" not in hidden_information:
         text += " ({:.3f} MB)".format(table_size)
-    if len(remove_indices) == 1:
+    if len(indices_to_remove) == 1:
         text += " (1 parameter hidden)"
-    elif len(remove_indices) > 1:
-        text += " ({} parameters hidden)".format(len(remove_indices))
+    elif len(indices_to_remove) > 1:
+        text += " ({} parameters hidden)".format(len(indices_to_remove))
     text += "\n"
     # Add column name
     text += LIMITER.join([
