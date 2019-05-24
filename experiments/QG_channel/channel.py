@@ -22,7 +22,7 @@ param.Ly = param.Lx/4
 param.geometry = 'xperio'
 
 # time
-param.tend = 1000.
+param.tend = 5000.
 param.cfl = 1.2
 param.adaptable_dt = True
 param.dt = 1.
@@ -73,14 +73,19 @@ sigma = 0.08
 idx = disc(param, grid, 0.125*param.Lx, 0.5, sigma)
 grid.msk[idx] = 0
 grid.msknoslip[idx] = 0
-grid.island.add(idx, psi0*.5)
+grid.island.add(idx, 0.)
 
+if grid.j0 == 0:
+    msk = grid.msk.copy()*0
+    msk[:nh, :] = 1
+    idx = np.where(msk == 1)
+    grid.island.add(idx, -psi0*.5)
 
 if grid.j0 == param.npy-1:
     msk = grid.msk.copy()*0
     msk[-nh:-1, :] = 1
     idx = np.where(msk == 1)
-    grid.island.add(idx, psi0)
+    grid.island.add(idx, psi0*.5)
 
 # tell the code to deactivate the no-slip along the outer walls
 if grid.j0 == 0:
@@ -94,6 +99,7 @@ f2d = Fluid2d(param, grid)
 model = f2d.model
 
 xr, yr = grid.xr, grid.yr
+yr0 = grid.yr0
 
 pv = model.var.get('pv')
 
@@ -109,7 +115,7 @@ pv[:] = y
 # we see that to have psi(y)=a*y we need to set
 # pvanom = -Rd^-2 * psi
 # this is what does the next line
-pv -= param.Rd**(-2) * psi0*yr/param.Ly*grid.msk
+pv -= param.Rd**(-2) * psi0*yr0/param.Ly*grid.msk
 
 # now we add the background planetary pv 'beta*y'
 model.add_backgroundpv()

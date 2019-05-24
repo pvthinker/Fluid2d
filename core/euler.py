@@ -134,6 +134,8 @@ class Euler(object):
             if 'age' in self.var.varname_list:
                 age *= damping
 
+        self.set_psi_from_vorticity()
+
     def advection(self, x, t, dxdt):
         self.timers.tic('rhs_adv')
         
@@ -144,20 +146,20 @@ class Euler(object):
                 self.forc.add_forcing(x, t, dxdt)
             if self.diffusion:
                 self.ope.rhs_diffusion(x, t, dxdt)
-
-        self.timers.tic('invert')
-        self.ope.invert_vorticity(dxdt, flag='fast')
-        self.timers.toc('invert')
+        else:
+            self.timers.tic('invert')
+            self.ope.invert_vorticity(dxdt, flag='fast')
+            self.timers.toc('invert')
 
     def add_noslip(self, x):
         self.timers.tic('noslip')
         source = self.var.get('source')
         self.ope.rhs_noslip(x, source)
         self.timers.toc('noslip')
-        if not(self.enforce_momentum):
-            self.timers.tic('invert')
-            self.ope.invert_vorticity(x, flag='fast', island=self.isisland)
-            self.timers.toc('invert')
+        # if not(self.enforce_momentum):
+        #     self.timers.tic('invert')
+        #     self.ope.invert_vorticity(x, flag='fast', island=self.isisland)
+        #     self.timers.toc('invert')
 
     def set_psi_from_vorticity(self):
         self.ope.invert_vorticity(self.var.state, island=self.isisland)

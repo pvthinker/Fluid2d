@@ -394,7 +394,6 @@ class Operators(Param):
 
         fo.celltocorner(x[iw], self.work)
         if island and self.first_time:
-            # print('adding rhsp')
             self.work[:, :] -= self.rhsp
 
         if flag == 'fast':
@@ -420,9 +419,9 @@ class Operators(Param):
                 print('    the residual should decrease by several orders')
                 print('    of magnitude otherwise something is wrong')
                 print('-'*50)
-            
+
             ite, res = self.gmg.solve(psi, self.work,
-                                      {'maxite': 8,
+                                      {'maxite': 4,
                                        'tol': 1e-11,
                                        'verbose': verbose})
 
