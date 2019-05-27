@@ -9,6 +9,7 @@
 import os
 import sys
 import cmd
+import shutil
 import sqlite3 as dbsys
 import subprocess
 
@@ -32,6 +33,10 @@ hidden_information = {
     'datetime_seconds',
 }
 
+# Switch for temporarily showing all information, including full comments:
+DISPLAY_ALL = False
+
+
 class EMDBConnection:
     """Experiment Management Database Connection"""
 
@@ -52,6 +57,9 @@ class EMDBConnection:
         print("-"*50)
         self.connection.close()
 
+    def save_database(self):
+        self.connection.commit()
+
     def get_table_overview(self):
         if self.tables:
             text = "Experiments in database:"
@@ -64,20 +72,18 @@ class EMDBConnection:
             text = "No experiments in database."
         return text
 
-    def show_full_tables(self):
-        print("-"*50)
+    def show_all_tables(self):
         for table in self.tables:
-            print(table)
             print("-"*50)
+            print(table)
 
     def show_table(self, name):
+        print("-"*50)
         for table in self.tables:
             if table.name == name:
-                print("-"*50)
                 print(table)
-                print("-"*50)
-                return True
-        return False
+                return
+        print('Unknown experiment: "{}"'.format(name))
 
     def show_filtered_table(self, table_name, statement):
         for table in self.tables:
@@ -99,6 +105,17 @@ class EMDBConnection:
                 if name == n:
                     return True
         return False
+
+    def entry_exists(self, table_name, id_):
+        for table in self.tables:
+            if table.name == table_name:
+                return table.entry_exists(id_)
+
+    def delete_entry(self, table_name, id_):
+        for table in self.tables:
+            if table.name == table_name:
+                table.delete_entry(id_)
+                return
 
 
 class EMDBTable:
@@ -126,6 +143,9 @@ class EMDBTable:
         if self.c.fetchone() is not None:
             return True
         return False
+
+    def delete_entry(self, id_):
+        self.c.execute('DELETE FROM "{}" WHERE id = ?'.format(self.name), (id_,))
 
     def print_selection(self, statement):
         try:
@@ -281,73 +301,99 @@ class EMShell(cmd.Cmd):
         """List all experiment classes (tables) in the database."""
         print(self.con.get_table_overview())
 
-    def do_show(self, table_name):
-        """Show the content of a table.
-
-        If no table name is specified or selected, the content of every table is shown."""
-        if table_name:
-            # Try to open the specified table.
-            if not self.con.show_table(table_name):
-                # If it fails, print a message.
-                print('Unknown experiment: "{}"'.format(name))
+    def do_show(self, params):
+        """Show the content of a table."""
+        global DISPLAY_ALL
+        params = set(params.split())
+        if "-v" in params:
+            DISPLAY_ALL = True
+            params.remove('-v')
         else:
+            DISPLAY_ALL = False
+        if len(params) == 0:
+            # No table name given
             if self.selected_table:
                 self.con.show_table(self.selected_table)
             else:
-                # No table name given and no table selected
-                self.con.show_full_tables()
+                self.con.show_all_tables()
+        else:
+            for table_name in sorted(params):
+                # Try to open the specified table.
+                self.con.show_table(table_name)
+        print("-"*50)
 
     def complete_show(self, text, line, begidx, endidx):
         return self.table_name_completion(text)
 
     def help_show(self):
-        print(
-            "Show all information in the database about a class of experiments.\n"
-            "If no experiment is specified and no experiment is selected, "
-            "information about all the experiments is shown."
-        )
+        print("""> show [name(s) of experiment class(es)] [-v]
+    Show all entries in the database for one or more classes of experiments.
+    Specify as parameter the name of the experiment class to show.  Multiple
+    names may be specified.  If no name is specified, then the experiments of
+    the currently selected class are shown (cf. "select").  If no name name is
+    specified and no experiment selected, then all entries are shown.
+    Use the commands "enable" and "disable" to specify which information
+    (i.e., which column) is displayed.  To display all information instead, use
+    "show" with the parameter "-v".
+
+    See also: filter, sort.""")
 
     def do_filter(self, params):
+        global DISPLAY_ALL
+        if params.endswith(" -v"):
+            params = params[:-3]
+            DISPLAY_ALL = True
+        else:
+            DISPLAY_ALL = False
         self.con.show_filtered_table(self.selected_table, params)
 
     def complete_filter(self, text, line, begidx, endidx):
         return self.column_name_completion(self.selected_table, text)
 
     def help_filter(self):
-        print(
-            'Filter experiments by the given value of a given parameter.\n'
-            'Any valid SQLite WHERE-statement can be used as a filter, for example:\n'
-            ' - filter intensity <= 0.2\n'
-            ' - filter slope = 0.5\n'
-            ' - filter diffusion = "True"\n'
-            ' - filter perturbation = "gauss" AND duration > 20\n'
-            'It is necessary to put the value for string or boolean arguments in quotation '
-            'marks like this: "True", "False", "Some text".\n'
-            'Quotation marks are also necessary if the name of the parameter contains '
-            'whitespace.\n'
-            'To sort the experiments, use "sort".\n'
-            'To filter and sort the experiments, use SQLite syntax.\n'
-            'Examples:\n'
-            ' - filter intensity > 0.1 ORDER BY intensity\n'
-            ' - filter perturbation != "gauss" ORDER BY size_total DESC'
-        )
+        print("""> filter [condition] [-v]
+    Filter experiments of the currently selected class according to the given
+    condition.  Any valid SQLite WHERE-statement can be used as a filter.
+    Examples:
+     - filter intensity <= 0.2
+     - filter slope = 0.5
+     - filter diffusion = "True"
+     - filter datetime >= "2019-03-2
+     - filter perturbation != "gauss" AND duration > 20
+    It is necessary to put the value for string, datetime or boolean argument
+    in quotation marks as shown.
+    To sort the filtered experiments, use SQLite syntax.
+    Examples:
+     - filter intensity > 0.1 ORDER BY intensity
+     - filter perturbation != "gauss" ORDER BY size_total DESC
+    The see all information about the filtered experiments, add "-v" at the end
+    of the command.
+
+    See also: sort, show.""")
 
     def do_sort(self, params):
+        global DISPLAY_ALL
+        if params.endswith(" -v"):
+            params = params[:-3]
+            DISPLAY_ALL = True
+        else:
+            DISPLAY_ALL = False
         self.con.show_sorted_table(self.selected_table, params)
 
     def complete_sort(self, text, line, begidx, endidx):
         return self.column_name_completion(self.selected_table, text)
 
     def help_sort(self):
-        print(
-            'Sort the experiments by the value of a given parameter.\n'
-            'To invert the order, add "desc" (descending) to the command.\n'
-            'Example usages:\n'
-            ' - sort intensity: show experiments with lowest intensity on top of the table.\n'
-            ' - sort size_total desc: show experiments with biggest file size on top.\n'
-            'Quotation marks are necessary if the name of the parameter contains whitespace.\n'
-            'To filter and sort the experiments, see the help of "filter".'
-        )
+        print("""> sort [parameter] [desc] [-v]
+    Sort the experiments by the value of a given parameter.
+    To invert the order, add "desc" (descending) to the command.
+    Examples:
+     - sort intensity: show experiments with lowest intensity on top of the table.
+     - sort size_total desc: show experiments with biggest file size on top.
+    The see all information about the sorted experiments, add "-v" at the end
+    of the command.
+
+    See also: filter, show.""")
 
     ### Functionality to OPEN experiment files
     def do_open_mp4(self, params):
@@ -356,11 +402,17 @@ class EMShell(cmd.Cmd):
         if not expname:
             return
         dir_ = os.path.join(self.exp_dir, expname)
-        for f in os.listdir(dir_):
+        try:
+            files = os.listdir(dir_)
+        except FileNotFoundError:
+            print("Folder does not exist:", dir_)
+            return
+        for f in files:
             if f.endswith(".mp4") and f.startswith(expname):
                 break
         else:
-            print("No mp4-file found in folder:", dir_)    
+            print("No mp4-file found in folder:", dir_)
+            return
         path = os.path.join(self.exp_dir, expname, f)
         self.open_file(MP4_PLAYER, path)
 
@@ -401,6 +453,77 @@ class EMShell(cmd.Cmd):
 
     def complete_open_diag(self, text, line, begidx, endidx):
         return self.table_name_completion(text)
+
+    ### Functionality to CLEAN up
+    def do_remove(self, params):
+        global DISPLAY_ALL
+        DISPLAY_ALL = True
+
+        # Check conditions and parameters
+        if not self.selected_table:
+            print('No table selected.  Select a table to remove entries.')
+            return
+        if not params:
+            print('No ids given.  Specify ids of the entries to remove.')
+            return
+
+        # Parse parameters
+        ids = set()
+        for p in params.split():
+            try:
+                id_ = int(p)
+            except ValueError:
+                print('Parameter is not a valid id: ' + p + '.  No data removed.')
+                return
+            if not self.con.entry_exists(self.selected_table, id_):
+                print('No entry with id', id_, 'exists in the selected table.  No data removed.')
+                return
+            ids.add(id_)
+
+        # Print full information of selected entries
+        if len(ids) == 1:
+            statement = "id = {}".format(*ids)
+        else:
+            statement = "id IN {}".format(tuple(ids))
+        print('WARNING: the following entries will be DELETED:')
+        self.con.show_filtered_table(self.selected_table, statement)
+
+        # Print full information of related folders
+        folders = []
+        print('WARNING: the following folders and files will be DELETED:')
+        for id_ in ids:
+            expname = "{}_{:03}".format(self.selected_table, id_)
+            folder = os.path.join(self.exp_dir, expname)
+            try:
+                files = os.listdir(folder)
+            except FileNotFoundError:
+                print(' x Folder does not exist:', folder)
+            else:
+                folders.append(folder)
+                print(" -", folder)
+                for f in sorted(files):
+                    print("   -", f)
+
+        # Final check
+        print('Do you really want to permanently delete these files, folders and entries?')
+        print('This cannot be undone.')
+        answer = input('Continue [yes/no] ? ')
+        if answer == 'yes':
+            # Remove entries
+            for id_ in ids:
+                self.con.delete_entry(self.selected_table, id_)
+                print('Deleted entry', id_, 'from experiment "{}".'.format(self.selected_table))
+            self.con.save_database()
+            # Remove files
+            for folder in folders:
+                try:
+                    shutil.rmtree(folder)
+                except OSError as e:
+                    print('Error deleting folder {}:'.format(folder), e)
+                else:
+                    print('Deleted folder {}.'.format(folder))
+        else:
+            print('Answer was not "yes".  No data removed.')
 
     ### Functionality to SELECT a specific table
     def do_select(self, params):
@@ -521,13 +644,14 @@ def string_format_table(table_name, columns, rows):
     columns = columns.copy()
     # Remove ignored columns
     indices_to_remove = []
-    for i, (n, t) in enumerate(columns):
-        if n in hidden_information:
-            indices_to_remove.append(i)
-    for i in sorted(indices_to_remove, reverse=True):
-        columns.pop(i)
-        for row in rows:
-            row.pop(i)
+    if not DISPLAY_ALL:
+        for i, (n, t) in enumerate(columns):
+            if n in hidden_information:
+                indices_to_remove.append(i)
+        for i in sorted(indices_to_remove, reverse=True):
+            columns.pop(i)
+            for row in rows:
+                row.pop(i)
     # To calculate the total size of the files associated with the table
     table_size = 0
     # Get necessary length for each column and process table
@@ -537,14 +661,14 @@ def string_format_table(table_name, columns, rows):
             # Check name of column
             if columns[i][0] == "comment":
                 # Cut comments which are too long and end them with an ellipsis
-                if len(val) > COMMENT_MAX_LENGTH:
+                if len(val) > COMMENT_MAX_LENGTH and not DISPLAY_ALL:
                     val = val[:COMMENT_MAX_LENGTH-1] + "…"
                     row[i] = val
             elif columns[i][0] == "datetime":
                 # Cut unnecessary parts of the date and time
-                if "datetime_year" in hidden_information:
+                if "datetime_year" in hidden_information and not DISPLAY_ALL:
                     val = val[5:]
-                if "datetime_seconds" in hidden_information:
+                if "datetime_seconds" in hidden_information and not DISPLAY_ALL:
                     val = val[:-10]
                 row[i] = val.replace('T', ',')
             elif columns[i][0] == "size_total":
@@ -568,23 +692,23 @@ def string_format_table(table_name, columns, rows):
                 )
     # Create top line of the text to be returned
     text = "Experiment: " + table_name
-    if "size_total" not in hidden_information:
+    if "size_total" not in hidden_information or DISPLAY_ALL:
         text += " ({:.3f} MB)".format(table_size)
     if len(indices_to_remove) == 1:
         text += " (1 parameter hidden)"
     elif len(indices_to_remove) > 1:
         text += " ({} parameters hidden)".format(len(indices_to_remove))
     text += "\n"
-    # Add column name
+    # Add column name centred, except the last one
     text += LIMITER.join([
         ("{:^" + str(l) + "}").format(n)
-        for (n, t), l in zip(columns, lengths)
-    ]) + "\n"
+        for (n, t), l in zip(columns[:-1], lengths[:-1])
+    ] + [columns[-1][0]]) + "\n"
     format_strings = []
     for (n, t), l in zip(columns, lengths):
         # Numbers right justified,
         # comments left justified,
-        # text centered
+        # text centred
         if n in ["size_diag", "size_flux", "size_his", "size_mp4", "size_total"]:
             format_strings.append("{:>" + str(l) + ".3f}")
         elif t == "REAL":
