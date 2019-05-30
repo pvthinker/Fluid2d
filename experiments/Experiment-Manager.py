@@ -7,11 +7,17 @@
 # value of param.datadir) must be specified as a command-line argument.
 
 import os
-import sys
 import cmd
 import shutil
 import sqlite3 as dbsys
 import subprocess
+
+try:
+    from param import Param
+except ModuleNotFoundError:
+    raise Exception(
+        "Please activate fluid2d to use this programme!"
+    )
 
 
 # Command to open mp4-files
@@ -20,13 +26,19 @@ MP4_PLAYER = "mplayer"
 NETCDF_VIEWER = "ncview"
 
 # Settings for the output of a table
-COMMENT_MAX_LENGTH = 21
+# The COMMENT_MAX_LENGTH can be "AUTO", "FULL" or a positive number
+COMMENT_MAX_LENGTH = "AUTO"
 FLOAT_FORMAT = "{:.4f}"
+# Display sizes with 2 decimals, because when 3 decimals are used,
+# the dot (or comma) can be mistaken for the separator after 1000.
+SIZE_FORMAT = "{:.2f}"
 LIMITER = "  "
+# Symbol of the linebreak and its replacement in comments
+LINEBREAK_REPLACE = ("\n", "|")
 
 # Hide the following information in the table
-# They can be activated with "enable" during runtime.
-# More information can be hidden with "disable".
+# They can be activated with the command "enable" during runtime.
+# More information can be hidden with the command "disable".
 hidden_information = {
     'size_diag',
     'size_flux',
@@ -34,7 +46,7 @@ hidden_information = {
 }
 
 # Switch for temporarily showing all information, including full comments:
-DISPLAY_ALL = False
+display_all = False
 
 
 class EMDBConnection:
@@ -217,7 +229,9 @@ class EMShell(cmd.Cmd):
 
     def do_enable(self, params):
         global hidden_information
-        if params == "all":
+        if not params:
+            print("Please specify information to enable.")
+        elif params == "all":
             hidden_information.clear()
         else:
             for param in params.split():
@@ -249,6 +263,9 @@ class EMShell(cmd.Cmd):
 
     def do_disable(self, params):
         global hidden_information
+        if not params:
+            print("Please specify information to disable.")
+            return
         for param in params.split():
             if param == "size":
                 # Short notation for the union of two sets
@@ -303,13 +320,13 @@ class EMShell(cmd.Cmd):
 
     def do_show(self, params):
         """Show the content of a table."""
-        global DISPLAY_ALL
+        global display_all
         params = set(params.split())
         if "-v" in params:
-            DISPLAY_ALL = True
+            display_all = True
             params.remove('-v')
         else:
-            DISPLAY_ALL = False
+            display_all = False
         if len(params) == 0:
             # No table name given
             if self.selected_table:
@@ -339,12 +356,12 @@ class EMShell(cmd.Cmd):
     See also: filter, sort.""")
 
     def do_filter(self, params):
-        global DISPLAY_ALL
+        global display_all
         if params.endswith(" -v"):
             params = params[:-3]
-            DISPLAY_ALL = True
+            display_all = True
         else:
-            DISPLAY_ALL = False
+            display_all = False
         self.con.show_filtered_table(self.selected_table, params)
 
     def complete_filter(self, text, line, begidx, endidx):
@@ -372,12 +389,12 @@ class EMShell(cmd.Cmd):
     See also: sort, show.""")
 
     def do_sort(self, params):
-        global DISPLAY_ALL
+        global display_all
         if params.endswith(" -v"):
             params = params[:-3]
-            DISPLAY_ALL = True
+            display_all = True
         else:
-            DISPLAY_ALL = False
+            display_all = False
         self.con.show_sorted_table(self.selected_table, params)
 
     def complete_sort(self, text, line, begidx, endidx):
@@ -456,8 +473,8 @@ class EMShell(cmd.Cmd):
 
     ### Functionality to CLEAN up
     def do_remove(self, params):
-        global DISPLAY_ALL
-        DISPLAY_ALL = True
+        global display_all
+        display_all = True
 
         # Check conditions and parameters
         if not self.selected_table:
@@ -524,6 +541,32 @@ class EMShell(cmd.Cmd):
                     print('Deleted folder {}.'.format(folder))
         else:
             print('Answer was not "yes".  No data removed.')
+
+    def do_print_disk_info(self, params):
+        # Explanation: https://stackoverflow.com/a/12327880/3661532
+        statvfs = os.statvfs(self.exp_dir)
+        available_space = statvfs.f_frsize * statvfs.f_bavail
+        print(
+            "Available disk space in the experiment directory:",
+            SIZE_FORMAT.format(available_space / 1024**3),
+            "GiB"
+        )
+        print("Experiment directory:", self.exp_dir)
+
+    def help_print_disk_info(self):
+        print("""> print_disk_info
+    Display the available disk space in the experiment directory and its path.
+    The available disk space is printed in Gibibytes (GiB), this means:
+        1 GiB = 1024^3 bytes.
+    This is used instead of the Gigabyte (GB), which is defined as:
+        1 GB = 1000^3 bytes,
+    because the GiB underestimates the free disk space, which is considered
+    safer than overestimating it.  In contrast, the size used by experiments is
+    displayed in Megabytes (MB), where
+        1 MB = 1000^2 bytes,
+    since the used space should rather be overestimated.
+    More information about the unit: https://en.wikipedia.org/wiki/Gibibyte ."""
+        )
 
     ### Functionality to SELECT a specific table
     def do_select(self, params):
@@ -639,12 +682,12 @@ class EMShell(cmd.Cmd):
 
 
 def string_format_table(table_name, columns, rows):
-    # Convert rows to list of lists (since fetchall() returns a list of tuples)
+    # Convert rows to list of lists (because fetchall() returns a list of tuples)
     rows = [list(row) for row in rows]
-    columns = columns.copy()
     # Remove ignored columns
+    columns = columns.copy()
     indices_to_remove = []
-    if not DISPLAY_ALL:
+    if not display_all:
         for i, (n, t) in enumerate(columns):
             if n in hidden_information:
                 indices_to_remove.append(i)
@@ -652,35 +695,49 @@ def string_format_table(table_name, columns, rows):
             columns.pop(i)
             for row in rows:
                 row.pop(i)
-    # To calculate the total size of the files associated with the table
-    table_size = 0
-    # Get necessary length for each column and process table
+    # Get width necessary for each column, get total size of the files
+    # associated with the table and process the entries of the table.
     lengths = [len(n) for n, t in columns]
+    table_size = 0
     for row in rows:
         for i, val in enumerate(row):
             # Check name of column
             if columns[i][0] == "comment":
-                # Cut comments which are too long and end them with an ellipsis
-                if len(val) > COMMENT_MAX_LENGTH and not DISPLAY_ALL:
-                    val = val[:COMMENT_MAX_LENGTH-1] + "…"
+                if display_all or COMMENT_MAX_LENGTH == "FULL":
+                    # No formatting needed
+                    pass
+                else:
+                    # Replace linebreaks
+                    val = val.replace(*LINEBREAK_REPLACE)
+                    if type(COMMENT_MAX_LENGTH) == int and COMMENT_MAX_LENGTH > 0:
+                        # Cut comments which are too long and end them with an ellipsis
+                        if len(val) > COMMENT_MAX_LENGTH:
+                            val = val[:COMMENT_MAX_LENGTH-1] + "…"
+                    elif COMMENT_MAX_LENGTH == "AUTO":
+                        # Cut comments later
+                        pass
+                    else:
+                        raise ValueError(
+                            'COMMENT_MAX_LENGTH has to be "AUTO" or "FULL" '
+                            'or a positive integer, not "{}".'.format(COMMENT_MAX_LENGTH)
+                        )
                     row[i] = val
             elif columns[i][0] == "datetime":
                 # Cut unnecessary parts of the date and time
-                if "datetime_year" in hidden_information and not DISPLAY_ALL:
+                if "datetime_year" in hidden_information and not display_all:
                     val = val[5:]
-                if "datetime_seconds" in hidden_information and not DISPLAY_ALL:
+                if "datetime_seconds" in hidden_information and not display_all:
                     val = val[:-10]
                 row[i] = val.replace('T', ',')
             elif columns[i][0] == "size_total":
                 if val > 0:
                     table_size += val
-
             # Check type of column and adopt
             if columns[i][1] == "TEXT" or columns[i][1] == "INTEGER":
                 lengths[i] = max(lengths[i], len(str(val)))
             elif columns[i][0] in ["size_diag", "size_flux", "size_his",
                                    "size_mp4", "size_total"]:
-                lengths[i] = max(lengths[i], len("{:.3f}".format(val)))
+                lengths[i] = max(lengths[i], len(SIZE_FORMAT.format(val)))
             elif columns[i][1] == "REAL":
                 lengths[i] = max(lengths[i], len(FLOAT_FORMAT.format(val)))
             else:
@@ -690,10 +747,25 @@ def string_format_table(table_name, columns, rows):
                     "unknown type {} of column {} in table {}."
                     .format(*columns[i], table_name)
                 )
+    if (
+            COMMENT_MAX_LENGTH == "AUTO"
+            and "comment" not in hidden_information
+            and not display_all
+    ):
+        line_length = shutil.get_terminal_size().columns
+        total_length = sum(lengths[:-1]) + len(LIMITER) * len(lengths[:-1])
+        comment_length = line_length - total_length % line_length
+        lengths[-1] = comment_length
+        for row in rows:
+            comment = row[-1]
+            # Cut comments which are too long and end them with an ellipsis
+            if len(comment) > comment_length:
+                comment = comment[:comment_length-1] + "…"
+                row[-1] = comment
     # Create top line of the text to be returned
     text = "Experiment: " + table_name
-    if "size_total" not in hidden_information or DISPLAY_ALL:
-        text += " ({:.3f} MB)".format(table_size)
+    if "size_total" not in hidden_information or display_all:
+        text += " (" + SIZE_FORMAT.format(table_size) + " MB)"
     if len(indices_to_remove) == 1:
         text += " (1 parameter hidden)"
     elif len(indices_to_remove) > 1:
@@ -707,16 +779,16 @@ def string_format_table(table_name, columns, rows):
     format_strings = []
     for (n, t), l in zip(columns, lengths):
         # Numbers right justified,
-        # comments left justified,
-        # text centred
+        # text centred,
+        # comments unformatted
         if n in ["size_diag", "size_flux", "size_his", "size_mp4", "size_total"]:
-            format_strings.append("{:>" + str(l) + ".3f}")
+            format_strings.append(SIZE_FORMAT.replace(":", ":>"+str(l)))
         elif t == "REAL":
             format_strings.append(FLOAT_FORMAT.replace(":", ":>"+str(l)))
         elif t == "INTEGER":
             format_strings.append("{:>" + str(l) + "}")
         elif n == "comment":
-            format_strings.append("{:" + str(l) + "}")
+            format_strings.append("{}")
         else:
             format_strings.append("{:^" + str(l) + "}")
     for row in rows:
@@ -725,20 +797,13 @@ def string_format_table(table_name, columns, rows):
     return text.strip()
 
 
-if len(sys.argv) == 1:
-    try:
-        from param import Param
-    except ModuleNotFoundError:
-        raise Exception(
-            "When fluid2d is not available, this programme has to be started "
-            "with the experiments-folder as argument."
-        )
-    param = Param(None)  # it is not necessary to specify a defaultfile for Param
-    datadir = param.datadir
-    if datadir.startswith("~"):
-        datadir = os.path.expanduser(param.datadir)
-    del param
-else:
-    datadir = sys.argv[1]
+# Get the directory of the experiments
+param = Param(None)  # it is not necessary to specify a defaultfile for Param
+datadir = param.datadir
+del param
+if datadir.startswith("~"):
+    datadir = os.path.expanduser(datadir)
+
+# Start the shell
 ems_cli = EMShell(datadir)
 ems_cli.cmdloop()

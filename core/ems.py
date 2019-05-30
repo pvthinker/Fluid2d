@@ -148,6 +148,7 @@ class EMS:
                 raise ParamError(
                     'param.expname is not a valid database entry: "{}"'.format(param.expname)
                 )
+            print(' Reading from entry #{} of table "{}".'.format(self.id_, self.exp_class))
 
         # Remember directory of the experiment
         self.output_dir = os.path.join(datadir, param.expname)
