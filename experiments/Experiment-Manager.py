@@ -10,6 +10,7 @@ import os
 import cmd
 import shutil
 import sqlite3 as dbsys
+import itertools
 import subprocess
 
 try:
@@ -35,6 +36,39 @@ SIZE_FORMAT = "{:.2f}"
 LIMITER = "  "
 # Symbol of the linebreak and its replacement in comments
 LINEBREAK_REPLACE = ("\n", "|")
+
+### Settings to print tables in colour
+# Set COLOURS to False or None to disable colours.
+# Otherwise, COLOURS must be list, of which each element describes the colours used in one row.
+# The colours of every row are described by a list of colour codes,
+# cf. https://en.wikipedia.org/wiki/ANSI_escape_code#Colors.
+# An arbitrary number of colours can be specified.
+# Apart from background colours, also text colours and font styles can be specified.
+# Example to colour rows alternately with white and default colour:
+# COLOURS = (
+#     ("\033[47m",),
+#     ("\033[49m",),
+# )
+# Example to colour columns alternately with white and default colour:
+# COLOURS = (
+#     ("\033[47m", "\033[49m",),
+# )
+# Example for a check-pattern:
+# COLOURS = (
+#     ("\033[47m", "\033[49m",),
+#     ("\033[49m", "\033[47m",),
+# )
+# Example for alternating background colours in rows and alternating font colours in columns:
+# COLOURS = (
+#    ("\033[31;47m", "\033[39;47m",),
+#    ("\033[31;49m", "\033[39;49m",),
+# )
+COLOURS = (
+    ("\033[107m",),
+    ("\033[49m",),
+)
+# Colour-code to reset to default colour and default font
+COLOURS_END = "\033[39;49m"
 
 # Hide the following information in the table
 # They can be activated with the command "enable" during runtime.
@@ -788,13 +822,23 @@ def string_format_table(table_name, columns, rows):
         elif t == "INTEGER":
             format_strings.append("{:>" + str(l) + "}")
         elif n == "comment":
-            format_strings.append("{}")
+            format_strings.append("{:" + str(l) + "}")
         else:
             format_strings.append("{:^" + str(l) + "}")
+    if COLOURS:
+        row_colours = itertools.cycle(COLOURS)
     for row in rows:
-        text_cols = [f_str.format(val) for f_str, val in zip(format_strings, row)]
-        text += LIMITER.join(text_cols) + "\n"
-    return text.strip()
+        if COLOURS:
+            col_colours = itertools.cycle(next(row_colours))
+        text_cols = [next(col_colours) + f_str.format(val) if COLOURS
+                     else f_str.format(val) for f_str, val in zip(format_strings, row)]
+        text += LIMITER.join(text_cols)
+        text += "\n"
+    if text.endswith("\n"):
+        text = text[:-1]
+    if COLOURS:
+        text = text + COLOURS_END
+    return text
 
 
 # Get the directory of the experiments
@@ -803,6 +847,30 @@ datadir = param.datadir
 del param
 if datadir.startswith("~"):
     datadir = os.path.expanduser(datadir)
+
+# Use fancy colours during 6 days of Carnival
+try:
+    import datetime
+    from dateutil.easter import easter
+    date_today = datetime.date.today()
+    carnival_start = easter(date_today.year)-datetime.timedelta(days=46+6)  # Weiberfastnacht
+    carnival_end = easter(date_today.year)-datetime.timedelta(days=46)  # Aschermittwoch
+    if carnival_start <= date_today < carnival_end or COLOURS == "HAPPY":
+        print("It's carnival!  Let's hope your terminal supports colours!")
+        # This looks like a rainbow on many terminals, e.g. xterm. 
+        COLOURS = (
+            ("\033[41m",),
+            ("\033[101m",),
+            ("\033[43m",),
+            ("\033[103m",),
+            ("\033[102m",),
+            ("\033[106m",),
+            ("\033[104m",),
+            ("\033[105m",),
+        )
+except:
+    # At least we tried!
+    pass
 
 # Start the shell
 ems_cli = EMShell(datadir)
