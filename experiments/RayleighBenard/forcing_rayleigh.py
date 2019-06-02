@@ -1,7 +1,7 @@
 from param import Param
 
 
-class Forcing(Param):
+class Forcing:
     """ define the forcing """
 
     def __init__(self, param, grid):

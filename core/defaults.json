@@ -301,7 +301,12 @@
         "forcing": {
             "type": "bool",
             "default": false,
-            "doc": "Activate a forcing. Needs to provide the name of the forcing routine"
+            "doc": "Activate a forcing. This requires to define and set a forcing in the python file. Alternatively, provide the name of the forcing routine as forcing_module."
+        },
+        "forcing_module": {
+            "type": "str",
+            "default": "embedded",
+            "doc": "If the forcing is not defined in the same file as the experiment (i.e. 'embedded'), provide the name of your forcing module (python script). It should be in the same folder as the python file of your experiment and must provide a class Forcing."
         },
         "decay": {
             "type": "bool",
