@@ -65,16 +65,21 @@ class Euler(object):
         self.tscheme.set(self.advection, self.timestepping)
 
         if self.forcing:
+            if self.forcing_module == 'embedded':
+                print('Warning: check that you have indeed add the forcing to the model')
+                print('Right below the line     : model = f2d.model')
+                print('you should have the line : model.forc = Forcing(param)')
 
-            try:
-                f = import_module(self.forcing_module)
-            except ImportError:
-                print('module %s for forcing cannot be found'
-                      % self.forcing_module)
-                print('make sure file **%s.py** exists' % self.forcing_module)
-                exit(0)
-
-            self.forc = f.Forcing(param, grid)
+                pass
+            else:
+                try:
+                    f = import_module(self.forcing_module)
+                except ImportError:
+                    print('module %s for forcing cannot be found'
+                          % self.forcing_module)
+                    print('make sure file **%s.py** exists' % self.forcing_module)
+                    exit(0)
+                self.forc = f.Forcing(param, grid)
 
         self.diags = {}
 
@@ -134,6 +139,8 @@ class Euler(object):
             if 'age' in self.var.varname_list:
                 age *= damping
 
+        self.set_psi_from_vorticity()
+
     def advection(self, x, t, dxdt):
         self.timers.tic('rhs_adv')
         
@@ -144,20 +151,20 @@ class Euler(object):
                 self.forc.add_forcing(x, t, dxdt)
             if self.diffusion:
                 self.ope.rhs_diffusion(x, t, dxdt)
-
-        self.timers.tic('invert')
-        self.ope.invert_vorticity(dxdt, flag='fast')
-        self.timers.toc('invert')
+        else:
+            self.timers.tic('invert')
+            self.ope.invert_vorticity(dxdt, flag='fast')
+            self.timers.toc('invert')
 
     def add_noslip(self, x):
         self.timers.tic('noslip')
         source = self.var.get('source')
         self.ope.rhs_noslip(x, source)
         self.timers.toc('noslip')
-        if not(self.enforce_momentum):
-            self.timers.tic('invert')
-            self.ope.invert_vorticity(x, flag='fast', island=self.isisland)
-            self.timers.toc('invert')
+        # if not(self.enforce_momentum):
+        #     self.timers.tic('invert')
+        #     self.ope.invert_vorticity(x, flag='fast', island=self.isisland)
+        #     self.timers.toc('invert')
 
     def set_psi_from_vorticity(self):
         self.ope.invert_vorticity(self.var.state, island=self.isisland)

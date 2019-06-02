@@ -131,7 +131,7 @@ class Gmg(object):
     def Fcycle(self, lev1):
         # push the RHS down on all grids
         deepest_lev = self.nlevs-1
-        for lev in range(lev1, deepest_lev-1):
+        for lev in range(lev1, deepest_lev):
             finetocoarse(self.grid[lev], self.grid[lev+1],
                          self.b[lev], self.b[lev+1])
 
@@ -167,7 +167,6 @@ class Gmg(object):
         nite_diverge = 0
         # improve the solution until one of this condition is met
         while (nite < param['maxite']) and (res0 > param['tol']):
-            #            self.x[0][:,:]=0.
             self.Fcycle(0)
             x += self.x[0]
             g.residual(x, b, self.b[0])
@@ -202,7 +201,6 @@ class Gmg(object):
         self.x[0][:, :] = 0.
         self.Fcycle(0)
         x += self.x[0]
-
         return 1, 0.
 
 # ----------------------------------------
@@ -211,15 +209,12 @@ class Gmg(object):
         x is the first guess, b the right hand side"""
 
         g = self.grid[0]
-        self.x[0] = x
-        self.b[0] = b
-        self.Vcycle(0)
-        self.Vcycle(0)
-#        g.residual(x,b,self.b[0])
-#        self.x[0][:,:]=0.
-#        self.Fcycle(0)
-#        x+=self.x[0]
-
+        self.x[0][:, :] = x
+        self.b[0][:, :] = b
+        for k in range(2):
+            g.residual(self.x[0], self.b[0], self.r[0])
+            self.Vcycle(0)
+        x[:, :] = self.x[0]
         return 1, 0.
 
 # ----------------------------------------
@@ -245,10 +240,10 @@ class Gmg(object):
 
             res0 = res
             nite += 1
-            if self.myrank == 0:
+            if (self.myrank == 0) and (param['verbose']):
                 print(' ite = %i / res = %g / conv = %g' % (nite, res, conv))
 
-            zglo = combine_global(g, self.r[0])
+            #zglo = combine_global(g, self.r[0])
 #            if myrank==0:
 #                plot2d(zglo,'zglobal')
 

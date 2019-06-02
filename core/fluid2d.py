@@ -12,6 +12,9 @@ import fluxes as Flx
 class Fluid2d(object):
     def __init__(self, param, grid):
 
+        # let's first check that no param is obviously incorrect
+        param.checkall()
+        
         # copy the launch script into 'expname.py' to allow
         # for experiment reproducibility
         launchscript = sys.argv[0]
