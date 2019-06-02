@@ -68,17 +68,23 @@ class QG(object):
         self.kt = 0
 
         if self.forcing:
+            if self.forcing_module == 'embedded':
+                print('Warning: check that you have indeed add the forcing to the model')
+                print('Right below the line     : model = f2d.model')
+                print('you should have the line : model.forc = Forcing(param)')
 
-            try:
-                f = import_module(self.forcing_module)
+                pass
+            else:
+                try:
+                    f = import_module(self.forcing_module)
 
-            except ImportError:
-                print('module %s for forcing cannot be found'
-                      % self.forcing_module)
-                print('make sure file **%s.py** exists' % self.forcing_module)
-                sys.exit(0)
+                except ImportError:
+                    print('module %s for forcing cannot be found'
+                          % self.forcing_module)
+                    print('make sure file **%s.py** exists' % self.forcing_module)
+                    sys.exit(0)
 
-            self.forc = f.Forcing(param, grid)
+                self.forc = f.Forcing(param, grid)
 
         self.diags = {}
 
@@ -108,6 +114,7 @@ class QG(object):
         if self.noslip:
             self.add_noslip(self.var.state)
 
+        self.set_psi_from_pv()
         # 3/ diagnostic fields
         self.var.state[self.ipva] = self.var.state[self.ipv] - self.pvback
         self.var.state[self.ivor] = (self.var.state[self.ipva]
@@ -154,11 +161,10 @@ class QG(object):
                 self.forc.add_forcing(x, t, dxdt)
             if self.diffusion:
                 self.ope.rhs_diffusion(x, t, dxdt)
-        # substract the background pv
-        dxdt[self.ipva][:, :] = dxdt[self.ipv]  # -self.pvback*self.dt
-#        self.ope.invert_vorticity(dxdt,flag='fast')
-        self.ope.invert_vorticity(dxdt, flag='fast', island=self.isisland)
-#        self.kt +=1
+
+        else:
+            dxdt[self.ipva] = dxdt[self.ipv]
+            self.ope.invert_vorticity(dxdt, flag='fast', island=self.isisland)
 
     def add_noslip(self, x):
         """Add the no-slip term """

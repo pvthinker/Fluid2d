@@ -65,16 +65,21 @@ class Euler(object):
         self.tscheme.set(self.advection, self.timestepping)
 
         if self.forcing:
+            if self.forcing_module == 'embedded':
+                print('Warning: check that you have indeed add the forcing to the model')
+                print('Right below the line     : model = f2d.model')
+                print('you should have the line : model.forc = Forcing(param)')
 
-            try:
-                f = import_module(self.forcing_module)
-            except ImportError:
-                print('module %s for forcing cannot be found'
-                      % self.forcing_module)
-                print('make sure file **%s.py** exists' % self.forcing_module)
-                exit(0)
-
-            self.forc = f.Forcing(param, grid)
+                pass
+            else:
+                try:
+                    f = import_module(self.forcing_module)
+                except ImportError:
+                    print('module %s for forcing cannot be found'
+                          % self.forcing_module)
+                    print('make sure file **%s.py** exists' % self.forcing_module)
+                    exit(0)
+                self.forc = f.Forcing(param, grid)
 
         self.diags = {}
 
