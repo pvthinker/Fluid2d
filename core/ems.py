@@ -78,7 +78,8 @@ class EMS:
             param_list = (
                 [
                     ["INTEGER", "id", -1],
-                    ["TEXT", "datetime", datetime.datetime.now().isoformat()],
+                    ["TEXT", "datetime",
+                     datetime.datetime.now().isoformat(timespec="microseconds")],
                 ]
                 + param_list
                 + [
@@ -238,7 +239,7 @@ class EMS:
         )
         self.connection.execute(
             'UPDATE "{}" SET datetime = ? WHERE id = ?'.format(self.exp_class),
-            (datetime.datetime.now().isoformat(), self.id_)
+            (datetime.datetime.now().isoformat(timespec="microseconds"), self.id_)
         )
 
         # Save the database

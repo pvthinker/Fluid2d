@@ -10,6 +10,7 @@ import os
 import cmd
 import shutil
 import sqlite3 as dbsys
+import datetime
 import itertools
 import subprocess
 
@@ -26,16 +27,25 @@ MP4_PLAYER = "mplayer"
 # Command to open NetCDF (his or diag) files
 NETCDF_VIEWER = "ncview"
 
-# Settings for the output of a table
-# The COMMENT_MAX_LENGTH can be "AUTO", "FULL" or a positive number
+### Settings for the output of a table
+# Maximal length of comments (possible values: "AUTO", "FULL" or a positive integer)
+# This setting is ignored if display_all is True.
 COMMENT_MAX_LENGTH = "AUTO"
+# Format-string for real numbers
 FLOAT_FORMAT = "{:.4f}"
-# Display sizes with 2 decimals, because when 3 decimals are used,
-# the dot (or comma) can be mistaken for the separator after 1000.
+# Format-string for file sizes (MB) or disk space (GiB)
+# Two decimals are used instead of three, to avoid confusion between the dot as
+# a decimal separator and a delimiter after 1000.
 SIZE_FORMAT = "{:.2f}"
+# Symbol to separate two columns of the table
 LIMITER = "  "
 # Symbol of the linebreak and its replacement in comments
+# This is ignored if display_all is True or COMMENT_MAX_LENGTH is "FULL".
 LINEBREAK_REPLACE = ("\n", "|")
+# Show date and time in ISO-format or easy-to-read-format
+# The easy-to-read-format does not include seconds, independent whether seconds
+# are hidden or not.  This setting is ignored if display_all is True.
+ISO_DATETIME = False
 
 ### Settings to print tables in colour
 # Set COLOURS to False or None to disable colours.
@@ -70,6 +80,35 @@ COLOURS = (
 # Colour-code to reset to default colour and default font
 COLOURS_END = "\033[39;49m"
 
+
+### Language settings (currently only for dates in easy-to-read-format)
+# Definition of languages
+class English:
+    JUST_NOW = "just now"
+    AGO_MINUTES = "{} min ago"
+    AGO_HOURS = "{}:{:02} h ago"
+    YESTERDAY = "yesterday"
+    FUTURE = "in the future"
+
+class French:
+    JUST_NOW = "maintenant"
+    AGO_MINUTES = "il y a {} min"
+    AGO_HOURS = "il y a {}h{:02}"
+    YESTERDAY = "hier"
+    FUTURE = "à l'avenir"
+
+class German:
+    JUST_NOW = "gerade eben"
+    AGO_MINUTES = "vor {} Min."
+    AGO_HOURS = "vor {}:{:02} Std."
+    YESTERDAY = "gestern"
+    FUTURE = "in der Zukunft"
+
+# Selection of a language
+LANG = English
+
+
+### Global variables modifiable during runtime
 # Hide the following information in the table
 # They can be activated with the command "enable" during runtime.
 # More information can be hidden with the command "disable".
@@ -79,7 +118,8 @@ hidden_information = {
     'datetime_seconds',
 }
 
-# Switch for temporarily showing all information, including full comments:
+# Temporarily show all information, including full comments
+# This is set to True by the argument "-v" to commands which print tables.
 display_all = False
 
 
@@ -716,6 +756,9 @@ class EMShell(cmd.Cmd):
 
 
 def string_format_table(table_name, columns, rows):
+    # Get current date and time to make datetime easy to read
+    if not ISO_DATETIME:
+        dt_now = datetime.datetime.now()
     # Convert rows to list of lists (because fetchall() returns a list of tuples)
     rows = [list(row) for row in rows]
     # Remove ignored columns
@@ -757,12 +800,20 @@ def string_format_table(table_name, columns, rows):
                         )
                     row[i] = val
             elif columns[i][0] == "datetime":
-                # Cut unnecessary parts of the date and time
-                if "datetime_year" in hidden_information and not display_all:
-                    val = val[5:]
-                if "datetime_seconds" in hidden_information and not display_all:
-                    val = val[:-10]
-                row[i] = val.replace('T', ',')
+                if display_all:
+                    # No formatting needed
+                    pass
+                elif ISO_DATETIME:
+                    # Cut unnecessary parts of the date and time
+                    if "datetime_year" in hidden_information:
+                        val = val[5:]
+                    if "datetime_seconds" in hidden_information:
+                        val = val[:-10]
+                    row[i] = val.replace('T', ',')
+                else:
+                    # Create datetime-object from ISO-format
+                    dt_obj = datetime.datetime.strptime(val, "%Y-%m-%dT%H:%M:%S.%f")
+                    row[i] = make_nice_time_string(dt_obj, dt_now)
             elif columns[i][0] == "size_total":
                 if val > 0:
                     table_size += val
@@ -841,6 +892,33 @@ def string_format_table(table_name, columns, rows):
     return text
 
 
+def make_nice_time_string(datetime_object, datetime_reference):
+    """Create an easy to read representation of the datetime object."""
+    if datetime_object > datetime_reference:
+        return LANG.FUTURE
+    elif datetime_object.date() == datetime_reference.date():
+        # same day
+        dt_diff = datetime_reference - datetime_object
+        dt_diff_minutes = dt_diff.seconds / 60
+        if dt_diff_minutes < 1:
+            return LANG.JUST_NOW
+        elif dt_diff_minutes < 59.5:
+            return LANG.AGO_MINUTES.format(round(dt_diff_minutes))
+        else:
+            return LANG.AGO_HOURS.format(int(dt_diff_minutes / 60), int(dt_diff_minutes % 60))
+    elif datetime_object.date() == (datetime_reference - datetime.timedelta(days=1)).date():
+        # yesterday
+        return datetime_object.strftime(LANG.YESTERDAY + ", %H:%M")
+    elif datetime_object.date() > (datetime_reference - datetime.timedelta(days=7)).date():
+        # this week, i.e., within the last six days
+        return datetime_object.strftime("%a, %H:%M")
+    else:
+        format_string = "%b-%d, %H:%M"
+        if "datetime_year" not in hidden_information:
+            format_string = "%Y-" + format_string
+        return datetime_object.strftime(format_string)
+
+
 # Get the directory of the experiments
 param = Param(None)  # it is not necessary to specify a defaultfile for Param
 datadir = param.datadir
@@ -850,7 +928,6 @@ if datadir.startswith("~"):
 
 # Use fancy colours during 6 days of Carnival
 try:
-    import datetime
     from dateutil.easter import easter
     date_today = datetime.date.today()
     carnival_start = easter(date_today.year)-datetime.timedelta(days=46+6)  # Weiberfastnacht
