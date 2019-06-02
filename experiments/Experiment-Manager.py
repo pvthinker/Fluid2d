@@ -255,7 +255,7 @@ class EMDBTable:
 # https://docs.python.org/3/library/cmd.html
 class EMShell(cmd.Cmd):
     """Experiment Management (System) Shell"""
-    
+
     intro = (
         "-" * 50
         + "\nType help or ? to list available commands."
@@ -809,11 +809,12 @@ def string_format_table(table_name, columns, rows):
                         val = val[5:]
                     if "datetime_seconds" in hidden_information:
                         val = val[:-10]
-                    row[i] = val.replace('T', ',')
+                    val = val.replace('T', ',')
                 else:
                     # Create datetime-object from ISO-format
                     dt_obj = datetime.datetime.strptime(val, "%Y-%m-%dT%H:%M:%S.%f")
-                    row[i] = make_nice_time_string(dt_obj, dt_now)
+                    val = make_nice_time_string(dt_obj, dt_now)
+                row[i] = val
             elif columns[i][0] == "size_total":
                 if val > 0:
                     table_size += val
@@ -934,7 +935,7 @@ try:
     carnival_end = easter(date_today.year)-datetime.timedelta(days=46)  # Aschermittwoch
     if carnival_start <= date_today < carnival_end or COLOURS == "HAPPY":
         print("It's carnival!  Let's hope your terminal supports colours!")
-        # This looks like a rainbow on many terminals, e.g. xterm. 
+        # This looks like a rainbow on many terminals, e.g. xterm.
         COLOURS = (
             ("\033[41m",),
             ("\033[101m",),
