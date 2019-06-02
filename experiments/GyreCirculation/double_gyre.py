@@ -1,7 +1,36 @@
+from fluid2d import Fluid2d
 from param import Param
 from grid import Grid
-from fluid2d import Fluid2d
 import numpy as np
+
+
+class Forcing:
+    """ define the forcing """
+
+    def __init__(self, param, grid):
+        yr = (grid.yr - param.Ly/2) / param.Ly
+
+        # jet width relative to param.Ly
+        sigma = 0.1
+
+        # forcing intensity
+        tau0 = 1e-4
+
+        # type of forcing: comment/uncomment choice A vs. B
+
+        # choice A/ jet-like forcing (localized in y)
+        # self.forc = tau0 * (yr/sigma)*np.exp(-yr**2/(2*sigma**2)) * grid.msk
+
+        # choice B/ basin-scale forcing: double gyre configuration
+        self.forc = tau0 * np.sin(yr * np.pi) * grid.msk
+
+        total = grid.domain_integration(self.forc)
+        self.forc -= (total / grid.area) * grid.msk
+
+    def add_forcing(self, x, t, dxdt):
+        """ add the forcing term on x[0]=the vorticity """
+        dxdt[0] += self.forc
+
 
 param = Param('default.xml')
 param.modelname = 'quasigeostrophic'
@@ -45,7 +74,6 @@ param.generate_mp4 = True
 param.beta = 1.
 param.Rd = 1.  # 2*grid.dx
 param.forcing = True
-param.forcing_module = 'forcing_dbl_gyre'
 param.noslip = False
 param.diffusion = False
 
@@ -59,6 +87,9 @@ param.Kdiff = 0.5e-4*grid.dx
 
 f2d = Fluid2d(param, grid)
 model = f2d.model
+
+# set the forcing
+model.forc = Forcing(param, grid)
 
 xr, yr = grid.xr, grid.yr
 vor = model.var.get('pv')

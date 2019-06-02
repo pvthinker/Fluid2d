@@ -66,9 +66,9 @@ class Euler(object):
 
         if self.forcing:
             if self.forcing_module == 'embedded':
-                print('Warning: check that you have indeed add the forcing to the model')
-                print('Right below the line     : model = f2d.model')
-                print('you should have the line : model.forc = Forcing(param)')
+                print('Warning: check that you have indeed added the forcing to the model')
+                print('Right below the line    : model = f2d.model')
+                print('you should have the line: model.forc = Forcing(param, grid)')
 
                 pass
             else:
