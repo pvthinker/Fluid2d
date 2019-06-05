@@ -1,6 +1,6 @@
 # Markus Reinert, May 2019
 #
-# Command-line interface for the fluid2d Experiment Management System (EMS).
+# Command-line interface for the fluid2d Experiment Management System (EMS)
 #
 # This programme can be started directly with Python if fluid2d is activated.
 # Otherwise, the path to the folder with the experiment-files (that is the
@@ -8,11 +8,16 @@
 
 import os
 import cmd
+import time
+import numpy as np
 import shutil
 import sqlite3 as dbsys
 import datetime
 import itertools
 import subprocess
+import matplotlib.pyplot as plt
+
+import EMShell_Extensions as EMExt
 
 try:
     from param import Param
@@ -26,6 +31,17 @@ except ModuleNotFoundError:
 MP4_PLAYER = "mplayer"
 # Command to open NetCDF (his or diag) files
 NETCDF_VIEWER = "ncview"
+
+### Extensions
+# Make new shell extensions available by adding them to this dictionary.
+# The key is the name under which the function is called in the shell,
+# which must not contain any whitespace.
+# The value is the function, which takes as only argument the path to the
+# his-file of an experiment and can return the calculated value.
+extra_tools = {
+    "wavenumber": EMExt.get_strongest_wavenumber,
+    "wavelength": lambda hisname: 1/EMExt.get_strongest_wavenumber(hisname),
+}
 
 ### Settings for the output of a table
 # Maximal length of comments (possible values: "AUTO", "FULL" or a positive integer)
@@ -158,6 +174,18 @@ class EMDBConnection:
             text = "No experiments in database."
         return text
 
+    def get_data(self, table_name, column_name, condition=""):
+        for table in self.tables:
+            if table_name == table.name:
+                return table.get_data(column_name, condition)
+        print(f'No table with name {table_name} found.')
+        return []
+
+    def get_column_names(self, table_name):
+        for table in self.tables:
+            if table.name == table_name:
+                return [n for n,t in table.columns]
+
     def show_all_tables(self):
         for table in self.tables:
             print("-"*50)
@@ -185,11 +213,12 @@ class EMDBConnection:
                 table.print_sorted(statement)
         print("-"*50)
 
-    def is_valid_column(self, name):
+    def is_valid_column(self, column_name, table_name=""):
         for table in self.tables:
-            for n, t in table.columns:
-                if name == n:
-                    return True
+            if not table_name or table_name == table.name:
+                for n, t in table.columns:
+                    if column_name == n:
+                        return True
         return False
 
     def entry_exists(self, table_name, id_):
@@ -223,6 +252,16 @@ class EMDBTable:
     def get_length(self):
         self.c.execute('SELECT Count(*) FROM "{}"'.format(self.name))
         return self.c.fetchone()[0]
+
+    def get_data(self, column_name, condition=""):
+        try:
+            self.c.execute(f'SELECT {column_name} FROM "{self.name}" WHERE {condition}' if condition else
+                           f'SELECT {column_name} FROM "{self.name}"')
+        except dbsys.OperationalError as e:
+            print(f'SQL error for experiment "{self.name}":', e)
+            return []
+        else:
+            return [e[0] for e in self.c.fetchall()]
 
     def entry_exists(self, id_):
         self.c.execute('SELECT id FROM "{}" WHERE id = ?'.format(self.name), (id_,))
@@ -260,7 +299,7 @@ class EMShell(cmd.Cmd):
         "-" * 50
         + "\nType help or ? to list available commands."
         + "\nType exit or Ctrl+D or Ctrl+C to exit."
-        + "\nPress Tab-key for auto-completion of commands, table names or column names."
+        + "\nPress Tab-key for auto-completion of commands, table names, etc."
         + "\n"
     )
     prompt = "(EMS) "
@@ -289,6 +328,7 @@ class EMShell(cmd.Cmd):
             return ["on", "off"]
         if text == "of":
             return ["off",]
+        return []
 
     def help_verbose(self):
         print(
@@ -323,11 +363,7 @@ class EMShell(cmd.Cmd):
         if not parameters.isdisjoint({'size_diag', 'size_flux', 'size_his',
                                       'size_mp4', 'size_total'}):
             parameters.add('size')
-        completions = []
-        for p in parameters:
-            if p.startswith(text):
-                completions.append(p)
-        return completions
+        return [p for p in parameters if p.startswith(text)]
 
     def help_enable(self):
         print(
@@ -366,11 +402,7 @@ class EMShell(cmd.Cmd):
         for table in self.con.tables:
             if self.selected_table == "" or self.selected_table == table.name:
                 parameters += [n for n,t in table.columns]
-        completions = []
-        for p in parameters:
-            if p.startswith(text) and p not in hidden_information:
-                completions.append(p)
-        return completions
+        return [p for p in parameters if p.startswith(text) and p not in hidden_information]
 
     def help_disable(self):
         print(
@@ -436,13 +468,16 @@ class EMShell(cmd.Cmd):
             display_all = True
         else:
             display_all = False
-        self.con.show_filtered_table(self.selected_table, params)
+        if not params:
+            print('No condition to filter given.  Type "help filter" for further information.')
+        else:
+            self.con.show_filtered_table(self.selected_table, params)
 
     def complete_filter(self, text, line, begidx, endidx):
         return self.column_name_completion(self.selected_table, text)
 
     def help_filter(self):
-        print("""> filter [condition] [-v]
+        print("""> filter <condition> [-v]
     Filter experiments of the currently selected class according to the given
     condition.  Any valid SQLite WHERE-statement can be used as a filter.
     Examples:
@@ -469,13 +504,16 @@ class EMShell(cmd.Cmd):
             display_all = True
         else:
             display_all = False
-        self.con.show_sorted_table(self.selected_table, params)
+        if not params:
+            print('No parameter to sort given.  Type "help sort" for further information.')
+        else:
+            self.con.show_sorted_table(self.selected_table, params)
 
     def complete_sort(self, text, line, begidx, endidx):
         return self.column_name_completion(self.selected_table, text)
 
     def help_sort(self):
-        print("""> sort [parameter] [desc] [-v]
+        print("""> sort <parameter> [desc] [-v]
     Sort the experiments by the value of a given parameter.
     To invert the order, add "desc" (descending) to the command.
     Examples:
@@ -545,6 +583,592 @@ class EMShell(cmd.Cmd):
     def complete_open_diag(self, text, line, begidx, endidx):
         return self.table_name_completion(text)
 
+    ### Functionality for Data Analysis
+    def do_calculate(self, params):
+        if not self.selected_table:
+            print('No experiment selected.  Select an experiment to do calculations on it.')
+            return
+        try:
+            toolname, id_ = params.split()
+        except ValueError:
+            print('Invalid syntax.  The correct syntax is: calculate <tool> <id>.  '
+                  'Make sure the name of the tool contains no space.')
+            return
+        if not extra_tools:
+            print('There are no tools for calculations loaded.  '
+                  'Add some tools in the code and restart the programme.')
+            return
+        if toolname not in extra_tools:
+            print(f'Unknown tool: "{toolname}".  The available tools are:')
+            for t in extra_tools:
+                print(" -", t)
+            return
+        try:
+            id_ = int(id_)
+        except ValueError:
+            print(f'Second parameter is not a valid id: "{id_}".')
+            return
+        if not self.con.entry_exists(self.selected_table, id_):
+            print(f'No entry with the id {id_} exists for the selected experiment.')
+            return
+        expname = "{}_{:03}".format(self.selected_table, id_)
+        path = os.path.join(self.exp_dir, expname, expname + '_his.nc')
+        try:
+            val = extra_tools[toolname](path)
+        except Exception as e:
+            print(f'Tool "{toolname}" did not succeed on experiment {id_}.  '
+                  'The error message is:')
+            print(e)
+            return
+        if val:
+            print(f'-> {toolname}({id_}) = {val}')
+        else:
+            print(f'-> {toolname}({id_}) succeeded without return value.')
+
+    def complete_calculate(self, text, line, begidx, endidx):
+        return [p for p in extra_tools if p.startswith(text)]
+
+    def help_calculate(self):
+        print("""> calculate <tool> <id>
+    Call an EMShell-Extension on an experiment and print the result.
+    This works always on the entries of the currently selected experiment.
+    To make a tool available, load it into the Python script of the
+    Experiment-Manager and add it to the dictionary "extra_tools".
+    Its name must not contain any whitespace.""")
+
+    def do_plot(self, params):
+        # Check the run condition
+        if not self.selected_table:
+            print('No experiment selected.  Select an experiment to plot its data.')
+            return
+        # Parse the arguments
+        param_list = params.split(" ")
+        # Two parameters are necessary
+        if len(param_list) < 2:
+            print('No two parameters given.  Type "help plot" for further information.')
+            return
+        param1 = param_list[0]
+        param_list.pop(0)
+        param2 = param_list[0]
+        param_list.pop(0)
+        # The last parameters can be used to modify the plot
+        save_as = None
+        draw_grid = False
+        format_string = ""
+        for param in reversed(param_list):
+            if param == "-png":
+                save_as = "PNG"
+                param_list.pop()
+            elif param == "-pdf":
+                save_as = "PDF"
+                param_list.pop()
+            elif param == "-grid":
+                draw_grid = True
+                param_list.pop()
+            elif param.startswith("-f="):
+                format_string = param[3:]
+                param_list.pop()
+            else:
+                # End of extra parameters, beginning of the SQL statement
+                break
+        # Every other parameter is an SQL condition to filter the data
+        condition = " ".join(param_list).strip()
+        # Get the data belonging to the parameters
+        data1 = self.get_data(self.selected_table, param1, condition)
+        if not data1:
+            print(f'Get data for first parameter "{param1}" ', end="")
+            if condition:
+                print(f'under condition "{condition}" ', end="")
+            print('failed.')
+            return
+        data2 = self.get_data(self.selected_table, param2, condition)
+        if not data2:
+            print(f'Get data for second parameter "{param2}" ', end="")
+            if condition:
+                print(f'under condition "{condition}" ', end="")
+            print('failed.')
+            return
+
+        print("-> x:", data1)
+        print("-> y:", data2)
+        plt.xlabel(param1)
+        plt.ylabel(param2)
+        if draw_grid:
+            plt.grid()
+        try:
+            plt.plot(
+                data1, data2, format_string,
+                label=f'{self.selected_table} ({condition if condition else "all data"})',
+            )
+        except Exception as e:
+            print("Plot did not succeed.  Error message:")
+            print(e)
+        else:
+            plt.legend()
+            if save_as == "PDF":
+                figid = 0
+                filename = f"figure_{figid}.pdf"
+                while os.path.exists(filename):
+                    figid += 1
+                    filename = f"figure_{figid}.pdf"
+                print(f'Saving plot as "{filename}".')
+                plt.savefig(filename)
+            elif save_as == "PNG":
+                figid = 0
+                filename = f"figure_{figid}.png"
+                while os.path.exists(filename):
+                    figid += 1
+                    filename = f"figure_{figid}.png"
+                print(f'Saving plot as "{filename}".')
+                plt.savefig(filename)
+            plt.show()
+
+    def complete_plot(self, text, line, begidx, endidx):
+        if not self.selected_table:
+            return []
+        parameters = ["f=", "grid", "png", "pdf"]
+        parameters += self.con.get_column_names(self.selected_table)
+        parameters.extend(extra_tools.keys())
+        return [p for p in parameters if p.startswith(text)]
+
+    def help_plot(self):
+        print("""> plot <parameter_1> <parameter_2> [condition] [-f=<format>] [-grid] [-{png|pdf}]
+    Make a diagram showing the relation between the two parameters for the
+    selected experiment.
+
+    The parameters can be read from the database or calculated using shell-
+    extensions.  Type "help calculate" for further information on extensions.
+
+    A condition can be used to filter or sort the data.  Type "help filter" for
+    further information on filtering and sorting.
+
+    To specify the type of plot, use "-f=<format>", where <format> is a format
+    string for matplotlib like "-f=o" to plot with dots instead of a line, or
+    "-f=rx" to plot with red crosses.  For further information on format strings
+    in matplotlib, see the Notes section on the following website:
+    https://matplotlib.org/3.1.0/api/_as_gen/matplotlib.pyplot.plot.html
+    If multiple format strings are specified, only the first one is considered.
+
+    To draw a grid on the plot, add "-grid" to the command.
+
+    Add either "-png" or "-pdf" to the command to save the figure in a file of
+    the corresponding filetype.  If both are specified, only the first argument
+    is taken into account.
+
+    The order of the qualifiers starting with a dash ("-") does not play a role,
+    but they must be at the end of the command.
+
+    While the window with the plot is open, the shell can be used as usual.
+    If another plot command is executed with the figure still open, the new plot
+    is superimposed onto the previous one.  Matplotlib automatically selects a
+    new colour if no colour is specified explicitely.  If the -grid argument is
+    specified a second time in another plot command, the grid is switched off.
+
+    Example:
+     - plot size_his duration id <= 10 -f=g.- -grid
+       This command creates a plot in green with dots and lines on a grid
+       comparing the integration time of the first ten experiments in the
+       selected class of experiments with the size of their history-file.""")
+
+    def do_scatter(self, params):
+        # Check the run condition
+        if not self.selected_table:
+            print('No experiment selected.  '
+                  'Select an experiment to make a scatter plot of its data.')
+            return
+        # Parse the arguments
+        param_list = params.split(" ")
+        # Two parameters are necessary
+        if len(param_list) < 3:
+            print('No three parameters given.  Type "help scatter" for further information.')
+            return
+        parameters = []
+        for i in range(3):
+            parameters.append(param_list.pop(0))
+        # The last parameters can be used to modify the plot
+        save_as = None
+        draw_grid = False
+        cmap = None
+        xmin = None
+        xmax = None
+        ymin = None
+        ymax = None
+        zmin = None
+        zmax = None
+        for param in reversed(param_list):
+            if param == "-png":
+                save_as = "PNG"
+                param_list.pop()
+            elif param == "-pdf":
+                save_as = "PDF"
+                param_list.pop()
+            elif param == "-grid":
+                draw_grid = True
+                param_list.pop()
+            elif param.startswith("-cmap="):
+                cmap = param[6:]
+                param_list.pop()
+            elif param.startswith("-xmin="):
+                try:
+                    xmin = float(param[6:])
+                except ValueError:
+                    print(f'Value for xmin cannot be converted to float: "{xmin}" '
+                          '-- ignoring it.')
+                param_list.pop()
+            elif param.startswith("-xmax="):
+                try:
+                    xmax = float(param[6:])
+                except ValueError:
+                    print(f'Value for xmax cannot be converted to float: "{xmax}" '
+                          '-- ignoring it.')
+                param_list.pop()
+            elif param.startswith("-ymin="):
+                try:
+                    ymin = float(param[6:])
+                except ValueError:
+                    print(f'Value for ymin cannot be converted to float: "{ymin}" '
+                          '-- ignoring it.')
+                param_list.pop()
+            elif param.startswith("-ymax="):
+                try:
+                    ymax = float(param[6:])
+                except ValueError:
+                    print(f'Value for ymax cannot be converted to float: "{ymax}" '
+                          '-- ignoring it.')
+                param_list.pop()
+            elif param.startswith("-zmin="):
+                try:
+                    zmin = float(param[6:])
+                except ValueError:
+                    print(f'Value for zmin cannot be converted to float: "{zmin}" '
+                          '-- ignoring it.')
+                param_list.pop()
+            elif param.startswith("-zmax="):
+                try:
+                    zmax = float(param[6:])
+                except ValueError:
+                    print(f'Value for zmax cannot be converted to float: "{zmax}" '
+                          '-- ignoring it.')
+                param_list.pop()
+            else:
+                # End of extra parameters, beginning of the SQL statement
+                break
+        # Every other parameter is an SQL condition to filter the data
+        condition = " ".join(param_list).strip()
+        # Get the data belonging to the parameters
+        datas = []
+        for parameter in parameters:
+            data = self.get_data(self.selected_table, parameter, condition)
+            if not data:
+                print(f'Get data for parameter "{parameter}" ', end="")
+                if condition:
+                    print(f'under condition "{condition}" ', end="")
+                print('failed.')
+                return
+            datas.append(data)
+        print("-> x:", datas[0])
+        print("-> y:", datas[1])
+        print("-> z:", datas[2])
+        plt.xlabel(parameters[0])
+        plt.ylabel(parameters[1])
+        plt.title(parameters[2])
+        if xmin is not None:
+            plt.xlim(left=xmin)
+        if xmax is not None:
+            plt.xlim(right=xmax)
+        if ymin is not None:
+            plt.ylim(bottom=ymin)
+        if ymax is not None:
+            plt.ylim(top=ymax)
+        if draw_grid:
+            plt.grid()
+        try:
+            plt.scatter(
+                datas[0], datas[1], c=datas[2], cmap=cmap, vmin=zmin, vmax=zmax,
+            )
+        except Exception as e:
+            print("Plot did not succeed.  Error message:")
+            print(e)
+        else:
+            plt.colorbar()
+            if save_as == "PDF":
+                figid = 0
+                filename = f"figure_{figid}.pdf"
+                while os.path.exists(filename):
+                    figid += 1
+                    filename = f"figure_{figid}.pdf"
+                print(f'Saving plot as "{filename}".')
+                plt.savefig(filename)
+            elif save_as == "PNG":
+                figid = 0
+                filename = f"figure_{figid}.png"
+                while os.path.exists(filename):
+                    figid += 1
+                    filename = f"figure_{figid}.png"
+                print(f'Saving plot as "{filename}".')
+                plt.savefig(filename)
+            plt.show()
+
+    def complete_scatter(self, text, line, begidx, endidx):
+        if not self.selected_table:
+            return []
+        parameters = ["cmap=", "grid", "png", "pdf"]
+        parameters += self.con.get_column_names(self.selected_table)
+        parameters.extend(extra_tools.keys())
+        return [p for p in parameters if p.startswith(text)]
+
+    def help_scatter(self):
+        print("""> scatter <parameter_1> <parameter_2> <parameter_3> [condition] [-cmap=<name>] [-grid] [-{x|y|y}{min|max}=<number>] [-{png|pdf}]
+    Make a scatter plot showing the values of parameter_3 in colour in relation
+    to parameter_1 and parameter_2 for the selected experiment.
+
+    The parameters can be read from the database or calculated using shell-
+    extensions.  Type "help calculate" for further information on extensions.
+
+    A condition can be used to filter or sort the data.  Type "help filter" for
+    further information on filtering and sorting.
+
+    To specify the colour map of plot, use "-cmap=<name>", where <name> is the
+    name of a colour_map for matplotlib like "-cmap=bwr" to plot in blue-white-
+    red or "-cmap=jet" for a colourful rainbow.  For further examples, consider
+    https://matplotlib.org/users/colormaps.html .
+    If multiple colour maps are specified, only the first one is considered.
+
+    To draw a grid on the plot, add "-grid" to the command.
+
+    To specify the range in either x-, y- or z-direction, use the attributes
+    -xmin=, -xmax=, -ymin=, -ymax=, -zmin=, -zmax= with a number as argument.
+    The z-axis refers to the colourbar.
+
+    Add either "-png" or "-pdf" to the command to save the figure in a file of
+    the corresponding filetype.  If both are specified, only the first argument
+    is taken into account.
+
+    The order of the qualifiers starting with a dash ("-") does not play a role,
+    but they must be at the end of the command.
+
+    While the window with the plot is open, the shell can be used as usual.
+    If another plot command is executed with the figure still open, the new plot
+    is superimposed onto the previous one.  Matplotlib automatically selects a
+    new colour if no colour is specified explicitely.
+
+    Example:
+     - scatter intensity sigma duration diffusion="False" OR Kdiff=0 -zmin=0
+       This command creates a scatter plot with the default colourmap of
+       matplotlib on a colour-axis starting from 0 which shows the integration
+       time in relation to the intensity and the value of sigma for experiments
+       of the current class without diffusion.""")
+
+    def do_pcolor(self, params):
+        # Check the run condition
+        if not self.selected_table:
+            print('No experiment selected.  '
+                  'Select an experiment to make a pseudocolour plot of its data.')
+            return
+        # Parse the arguments
+        param_list = params.split(" ")
+        # Two parameters are necessary
+        if len(param_list) < 3:
+            print('No three parameters given.  Type "help pcolor" for further information.')
+            return
+        parameters = []
+        for i in range(3):
+            parameters.append(param_list.pop(0))
+        # The last parameters can be used to modify the plot
+        save_as = None
+        draw_grid = False
+        shading = 'flat'
+        cmap = None
+        xmin = None
+        xmax = None
+        ymin = None
+        ymax = None
+        zmin = None
+        zmax = None
+        for param in reversed(param_list):
+            if param == "-png":
+                save_as = "PNG"
+                param_list.pop()
+            elif param == "-pdf":
+                save_as = "PDF"
+                param_list.pop()
+            elif param == "-grid":
+                draw_grid = True
+                param_list.pop()
+            elif param == "-shading":
+                shading = 'gouraud'
+                param_list.pop()
+            elif param.startswith("-cmap="):
+                cmap = param[6:]
+                param_list.pop()
+            elif param.startswith("-xmin="):
+                try:
+                    xmin = float(param[6:])
+                except ValueError:
+                    print(f'Value for xmin cannot be converted to float: "{xmin}" '
+                          '-- ignoring it.')
+                param_list.pop()
+            elif param.startswith("-xmax="):
+                try:
+                    xmax = float(param[6:])
+                except ValueError:
+                    print(f'Value for xmax cannot be converted to float: "{xmax}" '
+                          '-- ignoring it.')
+                param_list.pop()
+            elif param.startswith("-ymin="):
+                try:
+                    ymin = float(param[6:])
+                except ValueError:
+                    print(f'Value for ymin cannot be converted to float: "{ymin}" '
+                          '-- ignoring it.')
+                param_list.pop()
+            elif param.startswith("-ymax="):
+                try:
+                    ymax = float(param[6:])
+                except ValueError:
+                    print(f'Value for ymax cannot be converted to float: "{ymax}" '
+                          '-- ignoring it.')
+                param_list.pop()
+            elif param.startswith("-zmin="):
+                try:
+                    zmin = float(param[6:])
+                except ValueError:
+                    print(f'Value for zmin cannot be converted to float: "{zmin}" '
+                          '-- ignoring it.')
+                param_list.pop()
+            elif param.startswith("-zmax="):
+                try:
+                    zmax = float(param[6:])
+                except ValueError:
+                    print(f'Value for zmax cannot be converted to float: "{zmax}" '
+                          '-- ignoring it.')
+                param_list.pop()
+            else:
+                # End of extra parameters, beginning of the SQL statement
+                break
+        # Every other parameter is an SQL condition to filter the data
+        condition = " ".join(param_list).strip()
+        # Get the data belonging to the parameters
+        datas = []
+        for parameter in parameters:
+            data = self.get_data(self.selected_table, parameter, condition)
+            if not data:
+                print(f'Get data for parameter "{parameter}" ', end="")
+                if condition:
+                    print(f'under condition "{condition}" ', end="")
+                print('failed.')
+                return
+            datas.append(data)
+        # Arrange the data in a grid
+        xvalues = sorted(set(datas[0]))
+        yvalues = sorted(set(datas[1]))
+        print(f'There are {len(xvalues)} unique x-values and {len(yvalues)} unique y-values.')
+        data_grid = np.full((len(yvalues), len(xvalues)), np.nan)
+        for i, zval in enumerate(datas[2]):
+            data_grid[yvalues.index(datas[1][i]), xvalues.index(datas[0][i])] = zval
+        print(f"-> x ({parameters[0]}):", xvalues)
+        print(f"-> y ({parameters[1]}):", yvalues)
+        print(f"-> z ({parameters[2]}):")
+        print(data_grid)
+        if shading == 'flat':
+            xdiff2 = np.diff(xvalues)/2
+            xaxis = [xvalues[0] - xdiff2[0], *(xvalues[:-1] + xdiff2), xvalues[-1] + xdiff2[-1]]
+            ydiff2 = np.diff(yvalues)/2
+            yaxis = [yvalues[0] - ydiff2[0], *(yvalues[:-1] + ydiff2), yvalues[-1] + ydiff2[-1]]
+        else:
+            xaxis = xvalues
+            yaxis = yvalues
+        plt.xlabel(parameters[0])
+        plt.ylabel(parameters[1])
+        plt.title(f'{parameters[2]} ({condition if condition else "all data"})'  )
+        if xmin is not None:
+            plt.xlim(left=xmin)
+        if xmax is not None:
+            plt.xlim(right=xmax)
+        if ymin is not None:
+            plt.ylim(bottom=ymin)
+        if ymax is not None:
+            plt.ylim(top=ymax)
+        if draw_grid:
+            plt.grid()
+        try:
+            plt.pcolormesh(
+                xaxis, yaxis, data_grid, cmap=cmap, vmin=zmin, vmax=zmax,
+                shading=shading,
+            )
+        except Exception as e:
+            print("Plot did not succeed.  Error message:")
+            print(e)
+        else:
+            plt.colorbar()
+            if save_as == "PDF":
+                figid = 0
+                filename = f"figure_{figid}.pdf"
+                while os.path.exists(filename):
+                    figid += 1
+                    filename = f"figure_{figid}.pdf"
+                print(f'Saving plot as "{filename}".')
+                plt.savefig(filename)
+            elif save_as == "PNG":
+                figid = 0
+                filename = f"figure_{figid}.png"
+                while os.path.exists(filename):
+                    figid += 1
+                    filename = f"figure_{figid}.png"
+                print(f'Saving plot as "{filename}".')
+                plt.savefig(filename)
+            plt.show()
+
+    def complete_pcolor(self, text, line, begidx, endidx):
+        if not self.selected_table:
+            return []
+        parameters = ["cmap=", "grid", "png", "pdf", "shading"]
+        parameters += self.con.get_column_names(self.selected_table)
+        parameters.extend(extra_tools.keys())
+        return [p for p in parameters if p.startswith(text)]
+
+    def help_scatter(self):
+        print("""> scatter <parameter_1> <parameter_2> <parameter_3> [condition] [-cmap=<name>] [-grid] [-{x|y|y}{min|max}=<number>] [-{png|pdf}]
+    Make a scatter plot showing the values of parameter_3 in colour in relation
+    to parameter_1 and parameter_2 for the selected experiment.
+
+    The parameters can be read from the database or calculated using shell-
+    extensions.  Type "help calculate" for further information on extensions.
+
+    A condition can be used to filter or sort the data.  Type "help filter" for
+    further information on filtering and sorting.
+
+    To specify the colour map of plot, use "-cmap=<name>", where <name> is the
+    name of a colour_map for matplotlib like "-cmap=bwr" to plot in blue-white-
+    red or "-cmap=jet" for a colourful rainbow.  For further examples, consider
+    https://matplotlib.org/users/colormaps.html .
+    If multiple colour maps are specified, only the first one is considered.
+
+    To draw a grid on the plot, add "-grid" to the command.
+
+    To specify the range in either x-, y- or z-direction, use the attributes
+    -xmin=, -xmax=, -ymin=, -ymax=, -zmin=, -zmax= with a number as argument.
+    The z-axis refers to the colourbar.
+
+    Add either "-png" or "-pdf" to the command to save the figure in a file of
+    the corresponding filetype.  If both are specified, only the first argument
+    is taken into account.
+
+    The order of the qualifiers starting with a dash ("-") does not play a role,
+    but they must be at the end of the command.
+
+    While the window with the plot is open, the shell can be used as usual.
+    If another plot command is executed with the figure still open, the new plot
+    is superimposed onto the previous one.  Matplotlib automatically selects a
+    new colour if no colour is specified explicitely.
+
+    Example:
+     - scatter intensity sigma duration diffusion="False" OR Kdiff=0 -zmin=0
+       This command creates a scatter plot with the default colourmap of
+       matplotlib on a colour-axis starting from 0 which shows the integration
+       time in relation to the intensity and the value of sigma for experiments
+       of the current class without diffusion.""")
+
     ### Functionality to CLEAN up
     def do_remove(self, params):
         global display_all
@@ -552,7 +1176,7 @@ class EMShell(cmd.Cmd):
 
         # Check conditions and parameters
         if not self.selected_table:
-            print('No table selected.  Select a table to remove entries.')
+            print('No experiment selected.  Select an experiment to remove entries from it.')
             return
         if not params:
             print('No ids given.  Specify ids of the entries to remove.')
@@ -669,11 +1293,12 @@ class EMShell(cmd.Cmd):
         return True
 
     def do_EOF(self, params):
-        print("")
         if self.selected_table:
+            print("select")
             self.prompt = "(EMS) "
             self.selected_table = ""
         else:
+            print("exit")
             return True
 
     ### Behaviour for empty input
@@ -682,11 +1307,7 @@ class EMShell(cmd.Cmd):
 
     ### Helper functions
     def table_name_completion(self, text):
-        completions = []
-        for table in self.con.tables:
-            if table.name.startswith(text):
-                completions.append(table.name)
-        return completions
+        return [table.name for table in self.con.tables if table.name.startswith(text)]
 
     def column_name_completion(self, table_name, text):
         completions = []
@@ -753,6 +1374,33 @@ class EMShell(cmd.Cmd):
                 # Disable standard input via the shell, for example with mplayer.
                 stdin=subprocess.DEVNULL,
             )
+
+    def get_data(self, table_name, parameter, condition):
+        if self.con.is_valid_column(parameter, table_name):
+            return self.con.get_data(table_name, parameter, condition)
+        elif parameter in extra_tools:
+            data = []
+            ids = self.con.get_data(table_name, "id", condition)
+            print(f'Calculating data with tool "{parameter}" for {len(ids)} experiments.')
+            tstart = time.time()
+            for id_ in ids:
+                expname = "{}_{:03}".format(table_name, id_)
+                path = os.path.join(self.exp_dir, expname, expname + '_his.nc')
+                try:
+                    val = extra_tools[parameter](path)
+                except Exception as e:
+                    print(f'Tool "{parameter}" did not succeed on experiment {id_}.  '
+                          'The error message is:')
+                    print(e)
+                    print('Using value 0 (zero) as fallback.')
+                    val = 0
+                data.append(val)
+            print('Calculation finished in {:.3f} seconds.'.format(time.time() - tstart))
+            return data
+        else:
+            print(f'Parameter "{parameter}" is neither a parameter of the '
+                  'selected experiment nor a loaded extension.')
+            return []
 
 
 def string_format_table(table_name, columns, rows):
@@ -903,8 +1551,8 @@ def make_nice_time_string(datetime_object, datetime_reference):
         dt_diff_minutes = dt_diff.seconds / 60
         if dt_diff_minutes < 1:
             return LANG.JUST_NOW
-        elif dt_diff_minutes < 59.5:
-            return LANG.AGO_MINUTES.format(round(dt_diff_minutes))
+        elif dt_diff_minutes < 60:
+            return LANG.AGO_MINUTES.format(int(dt_diff_minutes))
         else:
             return LANG.AGO_HOURS.format(int(dt_diff_minutes / 60), int(dt_diff_minutes % 60))
     elif datetime_object.date() == (datetime_reference - datetime.timedelta(days=1)).date():
@@ -930,6 +1578,10 @@ if datadir.startswith("~"):
 # Use fancy colours during 6 days of Carnival
 try:
     from dateutil.easter import easter
+except ModuleNotFoundError:
+    # No fun at carnival possible
+    pass
+else:
     date_today = datetime.date.today()
     carnival_start = easter(date_today.year)-datetime.timedelta(days=46+6)  # Weiberfastnacht
     carnival_end = easter(date_today.year)-datetime.timedelta(days=46)  # Aschermittwoch
@@ -946,9 +1598,9 @@ try:
             ("\033[104m",),
             ("\033[105m",),
         )
-except:
-    # At least we tried!
-    pass
+
+# Activate interactive plotting
+plt.ion()
 
 # Start the shell
 ems_cli = EMShell(datadir)
