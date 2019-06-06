@@ -8,16 +8,20 @@ from scipy.fftpack import fft, fftshift, fftfreq
 
 
 def get_strongest_wavenumber(his_filename):
-    # Open data file
+    """Calculate the most intense wavenumber in y-direction.
+
+    This function opens the given history-file, performs a Fourier
+    transform in y on the masked streamfunction psi and returns the
+    highest wavenumber which has at some point in time the highest
+    intensity apart from the wavenumber zero."""
+    # Open history file and load the data
     dataset_his = nc.Dataset(his_filename)
-    # Load data
     ny = dataset_his.ny
     dy = dataset_his.Ly / ny
-    # Save the data as masked numpy arrays
-    x = dataset_his["x"][:]
+    # Save the data as a masked numpy array
     psi = dataset_his["psi"][:]
     psi.mask = 1 - dataset_his["msk"][:]
-    # Set length of zero-padded signal
+    # Set length of zero-padded signal (use ny for no zero-padding)
     fft_ny = ny
     # Caculate zero-padded Fourier-transform in y
     fft_psi = fftshift(fft(psi, n=fft_ny, axis=1), axes=1)
