@@ -680,7 +680,7 @@ class EMShell(cmd.Cmd):
             plt.show()
 
     def complete_plot(self, text, line, begidx, endidx):
-        return self.plot_attribute_completion(self, text, [
+        return self.plot_attribute_completion(text, [
             'f=', 'grid',
             'png', 'pdf',
             'xmin=', 'xmax=', 'ymin=', 'ymax=',
@@ -743,7 +743,7 @@ class EMShell(cmd.Cmd):
             plt.show()
 
     def complete_scatter(self, text, line, begidx, endidx):
-        return self.plot_attribute_completion(self, text, [
+        return self.plot_attribute_completion(text, [
             'cmap=', 'grid',
             'png', 'pdf',
             'xmin=', 'xmax=', 'ymin=', 'ymax=', 'zmin=', 'zmax=',
@@ -826,7 +826,7 @@ class EMShell(cmd.Cmd):
             plt.show()
 
     def complete_pcolor(self, text, line, begidx, endidx):
-        return self.plot_attribute_completion(self, text, [
+        return self.plot_attribute_completion(text, [
             'cmap=', 'shading', 'grid',
             'png', 'pdf',
             'xmin=', 'xmax=', 'ymin=', 'ymax=', 'zmin=', 'zmax=',
@@ -1250,7 +1250,7 @@ def string_format_table(table_name, columns, rows):
                 else:
                     # Replace linebreaks
                     val = val.replace(*LINEBREAK_REPLACE)
-                    if type(COMMENT_MAX_LENGTH) == int and COMMENT_MAX_LENGTH > 0:
+                    if type(COMMENT_MAX_LENGTH) is int and COMMENT_MAX_LENGTH > 0:
                         # Cut comments which are too long and end them with an ellipsis
                         if len(val) > COMMENT_MAX_LENGTH:
                             val = val[:COMMENT_MAX_LENGTH-1] + "…"
