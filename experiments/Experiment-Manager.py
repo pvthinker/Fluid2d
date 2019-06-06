@@ -682,12 +682,12 @@ class EMShell(cmd.Cmd):
     def complete_plot(self, text, line, begidx, endidx):
         return self.plot_attribute_completion(text, [
             'f=', 'grid',
-            'png', 'pdf',
+            'png', 'pdf', 'svg',
             'xmin=', 'xmax=', 'ymin=', 'ymax=',
         ])
 
     def help_plot(self):
-        print("""> plot <variable> <variable> [condition] [-grid] [-f=<format>] [-{x|y}{min|max}=<number>] [-{png|pdf}]
+        print("""> plot <variable> <variable> [condition] [-grid] [-f=<format>] [-{x|y}{min|max}=<number>] [-{png|pdf|svg}]
     Make a diagram showing the relation between the two variables for the
     selected experiment.""")
         self.print_general_plot_help("2d")
@@ -745,12 +745,12 @@ class EMShell(cmd.Cmd):
     def complete_scatter(self, text, line, begidx, endidx):
         return self.plot_attribute_completion(text, [
             'cmap=', 'grid',
-            'png', 'pdf',
+            'png', 'pdf', 'svg',
             'xmin=', 'xmax=', 'ymin=', 'ymax=', 'zmin=', 'zmax=',
         ])
 
     def help_scatter(self):
-        print("""> scatter <variable> <variable> <variable> [condition] [-grid] [-cmap=<name>] [-{x|y|z}{min|max}=<number>] [-{png|pdf}]
+        print("""> scatter <variable> <variable> <variable> [condition] [-grid] [-cmap=<name>] [-{x|y|z}{min|max}=<number>] [-{png|pdf|svg}]
     Make a scatter plot showing the values of the third variable in colour in
     relation to the other two variables for the selected experiment.""")
         self.print_general_plot_help("3d")
@@ -828,12 +828,12 @@ class EMShell(cmd.Cmd):
     def complete_pcolor(self, text, line, begidx, endidx):
         return self.plot_attribute_completion(text, [
             'cmap=', 'shading', 'grid',
-            'png', 'pdf',
+            'png', 'pdf', 'svg',
             'xmin=', 'xmax=', 'ymin=', 'ymax=', 'zmin=', 'zmax=',
         ])
 
     def help_pcolor(self):
-        print("""> pcolor <variable> <variable> <variable> [condition] [-grid] [-shading] [-cmap=<name>] [-{x|y|z}{min|max}=<number>] [-{png|pdf}]
+        print("""> pcolor <variable> <variable> <variable> [condition] [-grid] [-shading] [-cmap=<name>] [-{x|y|z}{min|max}=<number>] [-{png|pdf|svg}]
     Make a pseudo-colour plot showing the values of the third variable in colour
     in relation to the two other variables for the selected experiment.""")
         self.print_general_plot_help("3d", shading=True)
@@ -844,6 +844,28 @@ class EMShell(cmd.Cmd):
        matplotlib on a colour-axis starting from 0 which shows the integration
        time in relation to the intensity and the value of sigma for experiments
        of the current class without diffusion.""")
+
+    def do_save_figure(self, params):
+        if not params:
+            params = "png"
+        if params in ["png", "pdf", "svg"]:
+            plt.savefig(get_unique_save_filename("figure_{}." + params))
+        else:
+            plt.savefig(params)
+
+    def complete_save_figure(self, text, line, begidx, endidx):
+        if "." not in text:
+            return [e for e in ("png", "pdf", "svg") if e.startswith(text)]
+        stub = text[:text.rfind(".")]
+        return [n for n in (stub + ".png", stub + ".pdf", stub + ".svg") if n.startswith(text)]
+
+    def help_save_figure(self):
+        print("""> save_figure <filename or -type>
+    Save the currently opened figure in a file.  One can either specify the full
+    filename or one of the filetypes png, pdf or svg alone.  If only the type is
+    specified, then the name is automatically set to "figure_#.type", where
+    "#" is an integer such that the filename is unique and "type" is the given
+    filetype.""")
 
     ### Functionality to CLEAN up
     def do_remove(self, params):
@@ -1068,10 +1090,8 @@ class EMShell(cmd.Cmd):
             if not param:
                 # Ignore empty strings
                 pass
-            elif param == "-png":
-                parameters["save_as"] = "png"
-            elif param == "-pdf":
-                parameters["save_as"] = "pdf"
+            elif param in ["-png", "-pdf", "-svg"]:
+                parameters["save_as"] = param[1:]
             elif param == "-grid":
                 parameters["grid"] = True
             elif param == "-shading":
@@ -1195,8 +1215,9 @@ class EMShell(cmd.Cmd):
     with a number as the argument <v>.  The z-axis refers to the colourbar."""
             )
         print("""
-    Add either "-png" or "-pdf" to the command to save the figure in a file of
-    the corresponding filetype.
+    Add either "-png" or "-pdf" or "-svg" to the command to save the figure in
+    a file of the corresponding filetype.  Alternatively, use the command 
+    "save_figure" after creating the plot.
 
     The order of the qualifiers starting with a dash ("-") does not play a role,
     but they must be at the end of the command, i.e., after the variables and
