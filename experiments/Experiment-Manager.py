@@ -1,8 +1,29 @@
-# Markus Reinert, May/June 2019
-#
-# EMShell: Command-line interface for the fluid2d Experiment Management System (EMS)
-#
-# This programme requires fluid2d to be activated.
+"""EMShell: Command-line interface for the EMS of fluid2d
+
+EMS is the Experiment Management System of fluid2d, a powerful and
+convenient way to handle big sets of experiments, cf. core/ems.py.
+The EMShell is a command line interface to access, inspect, modify
+and analyse the database and its entries.
+
+To run this programme, activate fluid2d, then run this script with
+Python (version 3.6 or newer).
+
+This code uses f-strings, which were introduced in Python 3.6:
+  https://docs.python.org/3/whatsnew/3.6.html#whatsnew36-pep498
+Unfortunately, they create a SyntaxError in older Python versions.
+
+It is possible to access the experiment database from multiple
+processes at the same time, so one can add new entries to the database
+with the EMS of fluid2d while looking at the database and performing
+data analysis in the EMShell;  the EMShell shows automatically the
+updated version of the database.  However, this works less well if the
+database is accessed by processes on different computers.  In this
+case it can be necessary to restart the EMShell to see changes in the
+database.  It is always necessary to restart the EMShell when a new
+class of experiments was added to the database.
+
+Author: Markus Reinert, May/June 2019
+"""
 
 import os
 import re
@@ -12,11 +33,12 @@ import numpy as np
 import shutil
 import sqlite3 as dbsys
 import datetime
+import readline
 import itertools
 import subprocess
 import matplotlib.pyplot as plt
 # Local imports
-import EMShell_Extensions as EMExt
+import EMShellExtensions as EMExt
 try:
     from param import Param
 except ModuleNotFoundError:
@@ -37,8 +59,8 @@ NETCDF_VIEWER = "ncview"
 # The value is the function, which takes as only argument the path to the
 # his-file of an experiment and can return the calculated value.
 extra_tools = {
-    "wavenumber": EMExt.get_strongest_wavenumber,
-    "wavelength": lambda hisname: 1/EMExt.get_strongest_wavenumber(hisname),
+    "wavenumber": EMExt.get_strongest_wavenumber_y,
+    "wavelength": lambda hisname: 1/EMExt.get_strongest_wavenumber_y(hisname),
 }
 
 ### Settings for the output of a table
@@ -315,6 +337,18 @@ class EMShell(cmd.Cmd):
         self.intro += "\n" + self.con.get_table_overview() + "\n"
         self.selected_table = ""
         self.silent_mode = True
+        # Settings for saving the command history
+        self.command_history_file = os.path.join(self.exp_dir, ".emshell_history")
+        self.command_history_length = 1000
+
+
+    def preloop(self):
+        if os.path.exists(self.command_history_file):
+            readline.read_history_file(self.command_history_file)
+
+    def postloop(self):
+        readline.set_history_length(self.command_history_length)
+        readline.write_history_file(self.command_history_file)
 
     ### Functionality to MODIFY how the programme acts
     def do_verbose(self, params):
@@ -486,7 +520,7 @@ class EMShell(cmd.Cmd):
      - filter intensity <= 0.2
      - filter slope = 0.5
      - filter diffusion = "True"
-     - filter datetime >= "2019-03-2
+     - filter datetime >= "2019-03-21"
      - filter perturbation != "gauss" AND duration > 20
     It is necessary to put the value for string, datetime or boolean argument
     in quotation marks as shown.
@@ -1009,6 +1043,7 @@ class EMShell(cmd.Cmd):
 
     def plot_attribute_completion(self, text, parameters):
         if not self.selected_table:
+            print("\nError: select an experiment first!")
             return []
         parameters += self.con.get_column_names(self.selected_table)
         parameters.extend(extra_tools.keys())

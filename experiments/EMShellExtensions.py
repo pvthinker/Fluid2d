@@ -1,13 +1,20 @@
-# Markus Reinert, June 2019
-#
-# Extensions for the EMShell, the command-line interface of the fluid2d Experiment Management System (EMS)
+"""Extensions for the EMShell of fluid2d
+
+The EMShell is the command-line interface of the fluid2d Experiment
+Management System (EMS).  Its functionality for data analysis can be
+extended by adding new functions to the dictionary "extra_tools" in the
+EMShell.  These extensions are defined here, but they can also be
+imported from other files.
+
+Author: Markus REINERT, June 2019
+"""
 
 import numpy as np
 import netCDF4 as nc
 from scipy.fftpack import fft, fftshift, fftfreq
 
 
-def get_strongest_wavenumber(his_filename):
+def get_strongest_wavenumber_y(his_filename: str) -> float:
     """Calculate the most intense wavenumber in y-direction.
 
     This function opens the given history-file, performs a Fourier
