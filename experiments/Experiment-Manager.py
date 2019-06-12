@@ -317,6 +317,7 @@ class EMDBTable:
     def get_highest_index(self):
         self.c.execute('SELECT id from "{}" ORDER BY id DESC'.format(self.name))
         result = self.c.fetchone()
+        self.c.fetchall()  # otherwise the database stays locked
         return result[0] if result else None
 
     def entry_exists(self, id_):
