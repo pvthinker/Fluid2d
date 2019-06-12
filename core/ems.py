@@ -111,7 +111,11 @@ class EMS:
                         )
                 # Get the highest index
                 cursor.execute('SELECT id from "{}" ORDER BY id DESC'.format(self.exp_class))
-                self.id_ = cursor.fetchone()[0] + 1
+                highest_entry = cursor.fetchone()
+                if highest_entry:
+                    self.id_ = highest_entry[0] + 1
+                else:
+                    self.id_ = 1
             else:
                 # Create a new table
                 print(' Creating new table "{}".'.format(self.exp_class))

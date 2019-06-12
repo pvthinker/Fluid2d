@@ -186,10 +186,11 @@ class EMDBConnection:
         if self.tables:
             text = "Experiments in database:"
             for table in self.tables:
-                text += (
-                    "\n - {}: {} experiments, {} columns"
-                    .format(table.name, table.get_length(), len(table.columns))
-                )
+                n_entries = len(table)
+                n_columns = len(table.columns)
+                text += f"\n - {table.name}: "
+                text += f"{n_entries} experiment{'s' if n_entries != 1 else ''}, "
+                text += f"{n_columns} columns"
         else:
             text = "No experiments in database."
         return text
@@ -205,6 +206,23 @@ class EMDBConnection:
         for table in self.tables:
             if table.name == table_name:
                 return [n for n,t in table.columns]
+
+    def get_table_length(self, table_name):
+        for table in self.tables:
+            if table.name == table_name:
+                return len(table)
+
+    def get_highest_index(self, table_name):
+        for table in self.tables:
+            if table.name == table_name:
+                return table.get_highest_index()
+
+    def set_comment(self, table_name, id_, new_comment):
+        for table in self.tables:
+            if table.name == table_name:
+                return table.set_comment(id_, new_comment)
+        print(f'Unknown experiment: "{table_name}"')
+        return False
 
     def show_all_tables(self):
         for table in self.tables:
@@ -245,6 +263,12 @@ class EMDBConnection:
                         return True
         return False
 
+    def table_exists(self, table_name):
+        for table in self.tables:
+            if table.name == table_name:
+                return True
+        return False
+
     def entry_exists(self, table_name, id_):
         for table in self.tables:
             if table.name == table_name:
@@ -255,6 +279,9 @@ class EMDBConnection:
             if table.name == table_name:
                 table.delete_entry(id_)
                 return
+
+    def delete_table(self, table_name):
+        self.connection.execute(f'DROP TABLE "{table_name}"')
 
 
 class EMDBTable:
@@ -273,7 +300,7 @@ class EMDBTable:
         self.c.execute('SELECT * from "{}"'.format(self.name))
         return string_format_table(self.name, self.columns, self.c.fetchall())
 
-    def get_length(self):
+    def __len__(self):
         self.c.execute('SELECT Count(*) FROM "{}"'.format(self.name))
         return self.c.fetchone()[0]
 
@@ -286,6 +313,11 @@ class EMDBTable:
             return []
         else:
             return [e[0] for e in self.c.fetchall()]
+
+    def get_highest_index(self):
+        self.c.execute('SELECT id from "{}" ORDER BY id DESC'.format(self.name))
+        result = self.c.fetchone()
+        return result[0] if result else None
 
     def entry_exists(self, id_):
         self.c.execute('SELECT id FROM "{}" WHERE id = ?'.format(self.name), (id_,))
@@ -314,6 +346,18 @@ class EMDBTable:
         else:
             print(string_format_table(self.name, self.columns, self.c.fetchall()))
 
+    def set_comment(self, id_, new_comment):
+        try:
+            self.c.execute(
+                'UPDATE "{}" SET comment = ? WHERE id = ?'.format(self.name),
+                (new_comment, id_,)
+            )
+        except dbsys.OperationalError as e:
+            print('SQL error for experiment "{}":'.format(self.name), e)
+            return False
+        else:
+            return True
+
 
 # https://docs.python.org/3/library/cmd.html
 class EMShell(cmd.Cmd):
@@ -340,13 +384,11 @@ class EMShell(cmd.Cmd):
         # Settings for saving the command history
         self.command_history_file = os.path.join(self.exp_dir, ".emshell_history")
         self.command_history_length = 1000
-
-
-    def preloop(self):
+        # Load previously saved command history
         if os.path.exists(self.command_history_file):
             readline.read_history_file(self.command_history_file)
 
-    def postloop(self):
+    def __del__(self):
         readline.set_history_length(self.command_history_length)
         readline.write_history_file(self.command_history_file)
 
@@ -563,9 +605,10 @@ class EMShell(cmd.Cmd):
     ### Functionality to OPEN experiment files
     def do_open_mp4(self, params):
         """Open the mp4-file for an experiment specified by its name and ID."""
-        expname = self.parse_params_to_experiment(params)
-        if not expname:
+        expname_id = self.parse_params_to_experiment(params)
+        if not expname_id:
             return
+        expname = "{}_{:03}".format(*expname_id)
         dir_ = os.path.join(self.exp_dir, expname)
         try:
             files = os.listdir(dir_)
@@ -585,17 +628,19 @@ class EMShell(cmd.Cmd):
         return self.table_name_completion(text)
 
     def help_open_mp4(self):
-        print("Open the mp4-file for an experiment specified by its name and ID.\n"
-              "It is not possible to interact with the video player via input in the shell, "
-              "for example with mplayer.\n"
-              "User input via the graphical interface is not affected by this."
-        )
+        print(f"""> open_mp4 [experiment] <ID>
+    Open the mp4-file of an experiment with {MP4_PLAYER}.""")
+        self.print_param_parser_help()
+        print("""
+    The programme to open mp4-files with can be configured in the Python script
+    of the Experiment-Manager with the constant "MP4_PLAYER".""")
 
     def do_open_his(self, params):
         """Open the his-file for an experiment specified by its name and ID."""
-        expname = self.parse_params_to_experiment(params)
-        if not expname:
+        expname_id = self.parse_params_to_experiment(params)
+        if not expname_id:
             return
+        expname = "{}_{:03}".format(*expname_id)
         path = os.path.join(self.exp_dir, expname, expname + "_his.nc")
         if not os.path.isfile(path):
             print("File does not exist:", path)
@@ -605,11 +650,20 @@ class EMShell(cmd.Cmd):
     def complete_open_his(self, text, line, begidx, endidx):
         return self.table_name_completion(text)
 
+    def help_open_his(self):
+        print(f"""> open_his [experiment] <ID>
+    Open the NetCDF history-file of an experiment with {NETCDF_VIEWER}.""")
+        self.print_param_parser_help()
+        print("""
+    The programme to open NetCDF-files with can be configured in the Python
+    script of the Experiment-Manager with the constant "NETCDF_VIEWER".""")
+
     def do_open_diag(self, params):
         """Open the diag-file for an experiment specified by its name and ID."""
-        expname = self.parse_params_to_experiment(params)
-        if not expname:
+        expname_id = self.parse_params_to_experiment(params)
+        if not expname_id:
             return
+        expname = "{}_{:03}".format(*expname_id)
         path = os.path.join(self.exp_dir, expname, expname + "_diag.nc")
         if not os.path.isfile(path):
             print("File does not exist:", path)
@@ -619,17 +673,22 @@ class EMShell(cmd.Cmd):
     def complete_open_diag(self, text, line, begidx, endidx):
         return self.table_name_completion(text)
 
+    def help_open_diag(self):
+        print(f"""> open_diag [experiment] <ID>
+    Open the NetCDF diagnostics-file of an experiment with {NETCDF_VIEWER}.""")
+        self.print_param_parser_help()
+        print("""
+    The programme to open NetCDF-files with can be configured in the Python
+    script of the Experiment-Manager with the constant "NETCDF_VIEWER".""")
+
     ### Functionality for Data Analysis
     def do_calculate(self, params):
-        if not self.selected_table:
-            print('No experiment selected.  Select an experiment to do calculations on it.')
+        if " " not in params:
+            print("At least two arguments are needed.")
             return
-        try:
-            toolname, id_ = params.split()
-        except ValueError:
-            print('Invalid syntax.  The correct syntax is: calculate <tool> <id>.  '
-                  'Make sure the name of the tool contains no space.')
-            return
+        # Parse and check toolname
+        i = params.find(" ")
+        toolname = params[:i]
         if not extra_tools:
             print('There are no tools for calculations loaded.  '
                   'Add some tools in the code and restart the programme.')
@@ -639,15 +698,12 @@ class EMShell(cmd.Cmd):
             for t in extra_tools:
                 print(" -", t)
             return
-        try:
-            id_ = int(id_)
-        except ValueError:
-            print(f'Second parameter is not a valid id: "{id_}".')
+        # Parse ID and optionally table name
+        experiment_name_id = self.parse_params_to_experiment(params[i+1:])
+        if experiment_name_id is None:
             return
-        if not self.con.entry_exists(self.selected_table, id_):
-            print(f'No entry with the id {id_} exists for the selected experiment.')
-            return
-        expname = "{}_{:03}".format(self.selected_table, id_)
+        table_name, id_ = experiment_name_id
+        expname = "{}_{:03}".format(table_name, id_)
         path = os.path.join(self.exp_dir, expname, expname + '_his.nc')
         try:
             val = extra_tools[toolname](path)
@@ -657,17 +713,18 @@ class EMShell(cmd.Cmd):
             print(e)
             return
         if val is not None:
-            print(f'-> {toolname}({id_}) = {val}')
+            print(f'-> {toolname}({table_name}:{id_}) = {val}')
         else:
-            print(f'-> {toolname}({id_}) succeeded without return value.')
+            print(f'-> {toolname}({table_name}:{id_}) succeeded without return value.')
 
     def complete_calculate(self, text, line, begidx, endidx):
         return [p for p in extra_tools if p.startswith(text)]
 
     def help_calculate(self):
-        print("""> calculate <tool> <id>
-    Call an EMShell-Extension on an experiment and print the result.
-    This works always on the entries of the currently selected experiment.
+        print("""> calculate <tool> [experiment] <ID>
+    Call an EMShell-Extension on an experiment and print the result.""")
+        self.print_param_parser_help()
+        print("""
     To make a tool available, load it into the Python script of the
     Experiment-Manager and add it to the dictionary "extra_tools".
     Its name must not contain any whitespace.""")
@@ -901,33 +958,72 @@ class EMShell(cmd.Cmd):
     "#" is an integer such that the filename is unique and "type" is the given
     filetype.""")
 
-    ### Functionality to CLEAN up
-    def do_remove(self, params):
+    ### Functionality to MODIFY the entries
+    def do_new_comment(self, params):
+        # Check and parse parameters
+        table_name, id_ = self.parse_params_to_experiment(params)
+        # Print the current entry fully
         global display_all
         display_all = True
+        self.con.show_filtered_table(table_name, f"id = {id_}")
+        # Ask for user input
+        print("Write a new comment for this entry (Ctrl+D to finish, Ctrl+C to cancel):")
+        comment_lines = []
+        while True:
+            try:
+                line = input()
+            except EOFError:
+                break
+            except KeyboardInterrupt:
+                print("Cancelling.")
+                return
+            comment_lines.append(line)
+        comment = "\n".join(comment_lines).strip()
+        # Update the comment
+        if self.con.set_comment(table_name, id_, comment):
+            self.con.save_database()
+            print("New comment was saved.")
+        else:
+            print("An error occured.")
 
+    def help_new_comment(self):
+        print("""> new_comment [experiment] <ID>
+    Ask the user to enter a new comment for an experiment.""")
+        self.print_param_parser_help()
+
+    ### Functionality to CLEAN up
+    def do_remove(self, params):
         # Check conditions and parameters
         if not self.selected_table:
             print('No experiment selected.  Select an experiment to remove entries from it.')
             return
         if not params:
-            print('No ids given.  Specify ids of the entries to remove.')
+            print('No IDs given.  Specify at least one ID to remove its entry.')
             return
 
         # Parse parameters
         ids = set()
         for p in params.split():
-            try:
-                id_ = int(p)
-            except ValueError:
-                print('Parameter is not a valid id: ' + p + '.  No data removed.')
-                return
-            if not self.con.entry_exists(self.selected_table, id_):
-                print('No entry with id', id_, 'exists in the selected table.  No data removed.')
-                return
+            if p == "last" or p == "-1":
+                id_ = self.con.get_highest_index(self.selected_table)
+                if id_ is None:
+                    print(f'No entries exist for the experiment class "{self.selected_table}".')
+                    return
+            else:
+                try:
+                    id_ = int(p)
+                except ValueError:
+                    print('Parameter', p, 'is not a valid ID.  No data removed.')
+                    return
+                if not self.con.entry_exists(self.selected_table, id_):
+                    print('No entry with ID', id_, 'exists in the selected table.  '
+                          'No data removed.')
+                    return
             ids.add(id_)
 
         # Print full information of selected entries
+        global display_all
+        display_all = True
         if len(ids) == 1:
             statement = "id = {}".format(*ids)
         else:
@@ -971,6 +1067,55 @@ class EMShell(cmd.Cmd):
                     print('Deleted folder {}.'.format(folder))
         else:
             print('Answer was not "yes".  No data removed.')
+
+    def help_remove(self):
+        print("""> remove <ID>
+    Delete the entry with the given ID from the currently selected class of
+    experiments and all files associated with it.  Multiple IDs can be specified
+    to remove several entries and their folders at once.  Instead of an ID, the
+    value "last" can be used to choose the entry with the highest ID.  The value
+    "-1" is an alias for "last".  Before the data is deleted, the user is asked
+    to confirm, which must be answered with "yes".
+    The remove an empty class of experiments, use "remove_selected_class".""")
+
+    def do_remove_selected_class(self, params):
+        global display_all
+        display_all = True
+
+        # Check conditions and parameters
+        if not self.selected_table:
+            print('No experiment selected.  Select an experiment to remove it.')
+            return
+        if params:
+            print('This command takes no attributes.  Cancelling.')
+            return
+
+        if self.con.get_table_length(self.selected_table):
+            print('Selected experiment class contains experiments.  Remove these '
+                  'experiments first before removing the class.  Cancelling.')
+            return
+
+        print('Do you really want to permanently delete the experiment class '
+              f'"{self.selected_table}"?')
+        print('This cannot be undone.')
+        print('The EMShell will exit after the deletion.')
+        answer = input('Continue [yes/no] ? ')
+        if answer == 'yes':
+            self.con.delete_table(self.selected_table)
+            self.con.save_database()
+            print(f'Deleted experiment class "{self.selected_table}".')
+            print(f'EMShell must be restarted to update the list of tables.')
+            return True
+        else:
+            print('Answer was not "yes".  No data removed.')
+
+    def help_remove_selected_class(self):
+        print("""> remove_selected_class
+    Delete the currently selected class of experiments from the database.
+    This works only if no entries are associated with this experiment class.
+    Before the class is removed, the user is asked to confirm, which must be
+    answered with "yes".  To remove entries from the selected class, use the
+    command "remove".""")
 
     def do_print_disk_info(self, params):
         # Explanation: https://stackoverflow.com/a/12327880/3661532
@@ -1061,40 +1206,50 @@ class EMShell(cmd.Cmd):
     def check_table_exists(self, name):
         return name in [table.name for table in self.con.tables]
 
-    def parse_params_to_experiment(self, params):
+    def parse_params_to_experiment(self, params: str) -> [str, int]:
+        """Parse and check input of the form "[experiment] <ID>".
+
+        The argument "experiment" is optional, the ID is necessary.
+        Instead of an ID, "last" can be used to refer to the entry with
+        the highest ID.  The value "-1" is an alias for "last".
+        If no experiment is given, the selected experiment is taken.
+        Return None and print a message if input is not valid, otherwise
+        return the experiment name and the ID."""
+        if not params:
+            print("No ID given.")
+            return None
         params = params.split(" ")
-        # Check for correct parameter input
-        if len(params) < 2:
-            if self.selected_table:
-                if len(params) == 1:
-                    name = self.selected_table
-                else:
-                    print("Exactly 1 ID must be specified.")
-                    return
-            else:
-                print("Name and ID of experiment must be specified.")
-                return
+        # Parse the ID
+        specifier = params.pop()
+        if specifier == "last":
+            id_ = -1
         else:
-            # Extract name from input
-            name = " ".join(params[:-1]).strip()
-        # Check name
-        for table in self.con.tables:
-            if table.name == name:
-                break
+            try:
+                id_ = int(specifier)
+            except ValueError:
+                print(f'Last argument is not a valid ID: "{specifier}".')
+                return None
+        # Parse and check the table name
+        table_name = " ".join(params).strip()
+        if table_name:
+            if not self.con.table_exists(table_name):
+                print(f'No experiment class with the name "{table_name}" exists.')
+                return None
         else:
-            print('Unknown experiment: "{}"'.format(name))
-            return
-        # Extract and check ID
-        try:
-            id_ = int(params[-1])
-        except ValueError:
-            print('Last argument "{}" is not a valid ID.'.format(params[-1]))
-            return
-        if not table.entry_exists(id_):
-            print("No entry exists in table {} with ID {}.".format(name, id_))
-            return
-        # Return name of experiment folder
-        return "{}_{:03}".format(name, id_)
+            if not self.selected_table:
+                print("No experiment selected and no experiment name given.")
+                return None
+            table_name = self.selected_table
+        # Check the ID
+        if id_ == -1:
+            id_ = self.con.get_highest_index(table_name)
+            if id_ is None:
+                print(f'No entries exist for the experiment class "{table_name}".')
+                return None
+        elif not self.con.entry_exists(table_name, id_):
+            print(f'No entry with ID {id_} exists for the experiment class "{table_name}".')
+            return None
+        return table_name, id_
 
     @staticmethod
     def parse_plot_parameters(params, n_necessary):
@@ -1262,6 +1417,15 @@ class EMShell(cmd.Cmd):
     While the window with the plot is open, the shell can be used as usual.
     If another plot command is executed with the figure still open, the new plot
     is superimposed onto the previous one."""
+        )
+
+    @staticmethod
+    def print_param_parser_help():
+        print("""
+    If only an ID and no experiment name is given, take the currently selected
+    class of experiments.  Instead of an ID, the value "last" can be used to
+    choose the entry with the highest ID.  The value "-1" is an alias for
+    "last"."""
         )
 
 
