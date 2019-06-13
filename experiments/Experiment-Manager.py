@@ -381,7 +381,6 @@ class EMShell(cmd.Cmd):
         self.con = EMDBConnection(os.path.join(self.exp_dir, "experiments.db"))
         self.intro += "\n" + self.con.get_table_overview() + "\n"
         self.selected_table = ""
-        self.silent_mode = True
         # Settings for saving the command history
         self.command_history_file = os.path.join(self.exp_dir, ".emshell_history")
         self.command_history_length = 1000
@@ -394,32 +393,6 @@ class EMShell(cmd.Cmd):
         readline.write_history_file(self.command_history_file)
 
     ### Functionality to MODIFY how the programme acts
-    def do_verbose(self, params):
-        if params == "" or params.lower() == "on":
-            self.silent_mode = False
-        elif params.lower() == "off":
-            self.silent_mode = True
-        else:
-            print('Unknown parameter.  Please use "verbose on" or "verbose off".')
-
-    def complete_verbose(self, text, line, begidx, endidx):
-        if text == "" or text == "o":
-            return ["on", "off"]
-        if text == "of":
-            return ["off",]
-        return []
-
-    def help_verbose(self):
-        print(
-            "Toggle between verbose- and silent-mode.\n"
-            'Use "verbose on" or "verbose" to see the output of external programmes '
-            'started from this shell.\n'
-            'Use "verbose off" to hide all output of external programmes (default).\n'
-            'No error message is displayed in silent-mode when the opening of a file fails.\n'
-            'In any case, external programmes are started in the background, so the shell can '
-            'still be used, even if the input prompt is polluted.'
-        )
-
     def do_enable(self, params):
         global hidden_information
         if not params:
@@ -606,6 +579,11 @@ class EMShell(cmd.Cmd):
     ### Functionality to OPEN experiment files
     def do_open_mp4(self, params):
         """Open the mp4-file for an experiment specified by its name and ID."""
+        if params.endswith(" -v"):
+            verbose = True
+            params = params[:-3].rstrip()
+        else:
+            verbose = False
         expname_id = self.parse_params_to_experiment(params)
         if not expname_id:
             return
@@ -623,21 +601,28 @@ class EMShell(cmd.Cmd):
             print("No mp4-file found in folder:", dir_)
             return
         path = os.path.join(self.exp_dir, expname, f)
-        self.open_file(MP4_PLAYER, path)
+        self.open_file(MP4_PLAYER, path, verbose)
 
     def complete_open_mp4(self, text, line, begidx, endidx):
         return self.table_name_completion(text)
 
     def help_open_mp4(self):
-        print(f"""> open_mp4 [experiment] <ID>
+        print(f"""> open_mp4 [experiment] <ID> [-v]
     Open the mp4-file of an experiment with {MP4_PLAYER}.""")
         self.print_param_parser_help()
         print("""
+    Add "-v" to the command to see the output of the external programme.
+
     The programme to open mp4-files with can be configured in the Python script
     of the Experiment-Manager with the constant "MP4_PLAYER".""")
 
     def do_open_his(self, params):
         """Open the his-file for an experiment specified by its name and ID."""
+        if params.endswith(" -v"):
+            verbose = True
+            params = params[:-3].rstrip()
+        else:
+            verbose = False
         expname_id = self.parse_params_to_experiment(params)
         if not expname_id:
             return
@@ -646,21 +631,28 @@ class EMShell(cmd.Cmd):
         if not os.path.isfile(path):
             print("File does not exist:", path)
             return
-        self.open_file(NETCDF_VIEWER, path)
+        self.open_file(NETCDF_VIEWER, path, verbose)
 
     def complete_open_his(self, text, line, begidx, endidx):
         return self.table_name_completion(text)
 
     def help_open_his(self):
-        print(f"""> open_his [experiment] <ID>
+        print(f"""> open_his [experiment] <ID> [-v]
     Open the NetCDF history-file of an experiment with {NETCDF_VIEWER}.""")
         self.print_param_parser_help()
         print("""
+    Add "-v" to the command to see the output of the external programme.
+
     The programme to open NetCDF-files with can be configured in the Python
     script of the Experiment-Manager with the constant "NETCDF_VIEWER".""")
 
     def do_open_diag(self, params):
         """Open the diag-file for an experiment specified by its name and ID."""
+        if params.endswith(" -v"):
+            verbose = True
+            params = params[:-3].rstrip()
+        else:
+            verbose = False
         expname_id = self.parse_params_to_experiment(params)
         if not expname_id:
             return
@@ -669,16 +661,18 @@ class EMShell(cmd.Cmd):
         if not os.path.isfile(path):
             print("File does not exist:", path)
             return
-        self.open_file(NETCDF_VIEWER, path)
+        self.open_file(NETCDF_VIEWER, path, verbose)
 
     def complete_open_diag(self, text, line, begidx, endidx):
         return self.table_name_completion(text)
 
     def help_open_diag(self):
-        print(f"""> open_diag [experiment] <ID>
+        print(f"""> open_diag [experiment] <ID> [-v]
     Open the NetCDF diagnostics-file of an experiment with {NETCDF_VIEWER}.""")
         self.print_param_parser_help()
         print("""
+    Add "-v" to the command to see the output of the external programme.
+
     The programme to open NetCDF-files with can be configured in the Python
     script of the Experiment-Manager with the constant "NETCDF_VIEWER".""")
 
@@ -1307,9 +1301,16 @@ class EMShell(cmd.Cmd):
         parameters["condition"] = " ".join(param_list).strip()
         return parameters
 
-    def open_file(self, command, path):
-        if self.silent_mode:
-            print("Opening file {} with {} in silent-mode.".format(path, command))
+    def open_file(self, command, path, verbose=False):
+        if verbose:
+            print("Opening file {} with {} in verbose-mode.".format(path, command))
+            subprocess.Popen(
+                [command, path],
+                # Disable standard input via the shell, for example with mplayer.
+                stdin=subprocess.DEVNULL,
+            )
+        else:
+            print("Opening file {} with {} silently.".format(path, command))
             subprocess.Popen(
                 [command, path],
                 # Disable standard input via the shell, for example with mplayer.
@@ -1317,13 +1318,6 @@ class EMShell(cmd.Cmd):
                 # Throw away output and error messages.
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-            )
-        else:
-            print("Opening file {} with {} in verbose-mode.".format(path, command))
-            subprocess.Popen(
-                [command, path],
-                # Disable standard input via the shell, for example with mplayer.
-                stdin=subprocess.DEVNULL,
             )
 
     def get_multiple_data(self, table_name, variables, condition):

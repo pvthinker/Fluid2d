@@ -198,54 +198,77 @@ class EMS:
         that means, after the line with `f2d.loop()`.
         It also sets the field `datetime` to the current time."""
 
-        # Get duration of the run and size of the output files
-        integration_time = fluid2d.t
-
-        # Get list of files in the output directory
-        output_files = [os.path.join(self.output_dir, f) for f in os.listdir(self.output_dir)]
-        # To get size in MB, divide by 1000*1000 = 1e6.
-        total_size = sum(os.path.getsize(path) for path in output_files) / 1e6
-        his_size = os.path.getsize(fluid2d.output.hisfile) / 1e6
-        diag_size = os.path.getsize(fluid2d.output.diagfile) / 1e6
-        if fluid2d.plot_interactive and hasattr(fluid2d.plotting, 'mp4file'):
-            mp4_size = os.path.getsize(fluid2d.plotting.mp4file) / 1e6
-        else:
-            mp4_size = 0.0
-        if fluid2d.diag_fluxes:
-            flux_size = os.path.getsize(fluid2d.output.flxfile) / 1e6
-        else:
-            flux_size = 0.0
-
-        # Update values in the database
+        # Write duration of the run into the database
         self.connection.execute(
             'UPDATE "{}" SET duration = ? WHERE id = ?'.format(self.exp_class),
-            (round(integration_time, 2), self.id_,)
+            (round(fluid2d.t, 2), self.id_,)
         )
-        self.connection.execute(
-            'UPDATE "{}" SET size_total = ? WHERE id = ?'.format(self.exp_class),
-            (round(total_size, 3), self.id_,)
-        )
-        self.connection.execute(
-            'UPDATE "{}" SET size_mp4 = ? WHERE id = ?'.format(self.exp_class),
-            (round(mp4_size, 3), self.id_,)
-        )
-        self.connection.execute(
-            'UPDATE "{}" SET size_his = ? WHERE id = ?'.format(self.exp_class),
-            (round(his_size, 3), self.id_,)
-        )
-        self.connection.execute(
-            'UPDATE "{}" SET size_diag = ? WHERE id = ?'.format(self.exp_class),
-            (round(diag_size, 3), self.id_,)
-        )
-        self.connection.execute(
-            'UPDATE "{}" SET size_flux = ? WHERE id = ?'.format(self.exp_class),
-            (round(flux_size, 3), self.id_,)
-        )
+        # Update date and time in the database
         self.connection.execute(
             'UPDATE "{}" SET datetime = ? WHERE id = ?'.format(self.exp_class),
             (datetime.datetime.now().isoformat(timespec="microseconds"), self.id_)
         )
-
+        # Write size of output into the database
+        # Divide size by 1000*1000 = 1e6 to get value in MB
+        try:
+            # Get list of files in the output directory
+            output_files = [os.path.join(self.output_dir, f) for f in os.listdir(self.output_dir)]
+            total_size = sum(os.path.getsize(path) for path in output_files)
+        except FileNotFoundError as e:
+            print(" Error getting total size of output:", e)
+        else:
+            self.connection.execute(
+                'UPDATE "{}" SET size_total = ? WHERE id = ?'.format(self.exp_class),
+                (round(total_size / 1e6, 3), self.id_,)
+            )
+        # History file
+        try:
+            his_size = os.path.getsize(fluid2d.output.hisfile)
+        except FileNotFoundError as e:
+            print(" Error getting size of his-file:", e)
+        else:
+            self.connection.execute(
+                'UPDATE "{}" SET size_his = ? WHERE id = ?'.format(self.exp_class),
+                (round(his_size / 1e6, 3), self.id_,)
+            )
+        # Diagnostics file
+        try:
+            diag_size = os.path.getsize(fluid2d.output.diagfile)
+        except FileNotFoundError:
+            print(" Error getting size of diag-file:", e)
+        else:
+            self.connection.execute(
+                'UPDATE "{}" SET size_diag = ? WHERE id = ?'.format(self.exp_class),
+                (round(diag_size / 1e6, 3), self.id_,)
+            )
+        # MP4 file
+        mp4_size = -1.0
+        if fluid2d.plot_interactive and hasattr(fluid2d.plotting, 'mp4file'):
+            try:
+                mp4_size = os.path.getsize(fluid2d.plotting.mp4file)
+            except FileNotFoundError:
+                print(" Error getting size of mp4-file:", e)
+        else:
+            mp4_size = 0.0
+        if mp4_size >= 0:
+            self.connection.execute(
+                'UPDATE "{}" SET size_mp4 = ? WHERE id = ?'.format(self.exp_class),
+                (round(mp4_size / 1e6, 3), self.id_,)
+            )
+        # Flux file
+        flux_size = -1.0
+        if fluid2d.diag_fluxes:
+            try:
+                flux_size = os.path.getsize(fluid2d.output.flxfile)
+            except FileNotFoundError:
+                print(" Error getting size of flux-file:", e)
+        else:
+            flux_size = 0.0
+        if flux_size >= 0:
+            self.connection.execute(
+                'UPDATE "{}" SET size_flux = ? WHERE id = ?'.format(self.exp_class),
+                (round(flux_size / 1e6, 3), self.id_,)
+            )
         # Save the database
         self.connection.commit()
 
