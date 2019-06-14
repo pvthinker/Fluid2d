@@ -5,8 +5,10 @@ convenient way to handle big sets of experiments, cf. core/ems.py.
 The EMShell is a command line interface to access, inspect, modify
 and analyse the database and its entries.
 
-To run this programme, activate fluid2d, then run this script with
-Python (version 3.6 or newer).
+To start this programme, activate fluid2d, then run this script with
+Python (version 3.6 or newer).  Alternatively, without the need to
+activate fluid2d, specify the path to the experiment folder as a
+command-line argument when launching this script with Python.
 
 This code uses f-strings, which were introduced in Python 3.6:
   https://docs.python.org/3/whatsnew/3.6.html#whatsnew36-pep498
@@ -27,6 +29,7 @@ Author: Markus Reinert, May/June 2019
 
 import os
 import re
+import sys
 import cmd
 import time
 import numpy as np
@@ -39,12 +42,6 @@ import subprocess
 import matplotlib.pyplot as plt
 # Local imports
 import EMShellExtensions as EMExt
-try:
-    from param import Param
-except ModuleNotFoundError:
-    raise Exception(
-        "Please activate fluid2d to use this programme!"
-    )
 
 
 # Command to open mp4-files
@@ -1600,11 +1597,23 @@ def make_nice_time_string(datetime_object, datetime_reference):
 
 
 # Get the directory of the experiments
-param = Param(None)  # it is not necessary to specify a defaultfile for Param
-datadir = param.datadir
-del param
-if datadir.startswith("~"):
-    datadir = os.path.expanduser(datadir)
+if len(sys.argv) == 1:
+    try:
+        from param import Param
+    except ModuleNotFoundError:
+        raise Exception(
+            "Please activate fluid2d or specify the experiment-folder as "
+            "argument when starting this programme."
+        )
+    param = Param(None)  # it is not necessary to specify a defaultfile for Param
+    datadir = param.datadir
+    del param
+    if datadir.startswith("~"):
+        datadir = os.path.expanduser(datadir)
+elif len(sys.argv) == 2:
+    datadir = sys.argv[1]
+else:
+    raise Exception("More than one argument given.")
 
 # Use fancy colours during 6 days of Carnival
 try:
