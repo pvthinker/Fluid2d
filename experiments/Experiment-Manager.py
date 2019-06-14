@@ -1487,7 +1487,7 @@ def string_format_table(table_name, columns, rows):
                     if "datetime_year" in hidden_information:
                         val = val[5:]
                     if "datetime_seconds" in hidden_information:
-                        val = val[:-10]
+                        val = val.split(".")[0][:-3]
                     val = val.replace('T', ',')
                 else:
                     # Create datetime-object from ISO-format

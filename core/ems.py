@@ -79,7 +79,7 @@ class EMS:
                 [
                     ["INTEGER", "id", -1],
                     ["TEXT", "datetime",
-                     datetime.datetime.now().isoformat(timespec="microseconds")],
+                     datetime.datetime.now().isoformat()],
                 ]
                 + param_list
                 + [
@@ -164,6 +164,10 @@ class EMS:
         columns = cursor.fetchall()
         cursor.execute('SELECT * FROM "{}" WHERE id = ?'.format(self.exp_class), (self.id_,))
         values = cursor.fetchone()
+        if values is None:
+            raise ParamError(
+                'No entry with id {} exists in table "{}".'.format(self.id_, self.exp_class)
+            )
         for column in columns:
             col_index = column[0]
             col_name = column[1]
@@ -206,7 +210,7 @@ class EMS:
         # Update date and time in the database
         self.connection.execute(
             'UPDATE "{}" SET datetime = ? WHERE id = ?'.format(self.exp_class),
-            (datetime.datetime.now().isoformat(timespec="microseconds"), self.id_)
+            (datetime.datetime.now().isoformat(), self.id_)
         )
         # Write size of output into the database
         # Divide size by 1000*1000 = 1e6 to get value in MB
