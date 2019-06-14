@@ -943,12 +943,16 @@ class EMShell(cmd.Cmd):
         return [n for n in (stub + ".png", stub + ".pdf", stub + ".svg") if n.startswith(text)]
 
     def help_save_figure(self):
-        print("""> save_figure <filename or -type>
+        print("""> save_figure [filename or -type]
     Save the currently opened figure in a file.  One can either specify the full
     filename or one of the filetypes png, pdf or svg alone.  If only the type is
     specified, then the name is automatically set to "figure_#.type", where
     "#" is an integer such that the filename is unique and "type" is the given
-    filetype.""")
+    filetype.  If no type and no name is given, the figure is saved as png.""")
+
+    def do_new_figure(self, params):
+        """Open a window to draw the next plot in a new figure."""
+        plt.figure()
 
     ### Functionality to MODIFY the entries
     def do_new_comment(self, params):
@@ -1408,7 +1412,9 @@ class EMShell(cmd.Cmd):
 
     While the window with the plot is open, the shell can be used as usual.
     If another plot command is executed with the figure still open, the new plot
-    is superimposed onto the previous one."""
+    is superimposed onto the previous one.  To draw the next plot command in a
+    new figure instead, while keeping the previous window open, use the command
+    "new_figure"."""
         )
 
     @staticmethod
