@@ -81,18 +81,18 @@ LINEBREAK_REPLACE = ("\n", "|")
 ISO_DATETIME = False
 
 ### Settings to print tables in colour
-# Set COLOURS to False or None to disable colours.
+# Set COLOURS to False or None to disable colours (this does not disable highlighting).
 # Otherwise, COLOURS must be list, of which each element describes the colours used in one row.
 # The colours of every row are described by a list of colour codes,
 # cf. https://en.wikipedia.org/wiki/ANSI_escape_code#Colors.
 # An arbitrary number of colours can be specified.
 # Apart from background colours, also text colours and font styles can be specified.
-# Example to colour rows alternately with white and default colour:
+# Example to fill rows alternately with white and default colour:
 # COLOURS = (
 #     ("\033[47m",),
 #     ("\033[49m",),
 # )
-# Example to colour columns alternately with white and default colour:
+# Example to fill columns alternately with white and default colour:
 # COLOURS = (
 #     ("\033[47m", "\033[49m",),
 # )
@@ -110,6 +110,8 @@ COLOURS = (
     ("\033[107m",),
     ("\033[49m",),
 )
+# Colour-code to highlight columns (used by "compare -h")
+COLOURS_HIGHLIGHT = "\033[103m"
 # Colour-code to reset to default colour and default font
 COLOURS_END = "\033[39;49m"
 
@@ -160,6 +162,9 @@ class EMDBConnection:
     """Experiment Management Database Connection"""
 
     def __init__(self, dbpath: str):
+        self.connection = None
+        if not os.path.isfile(dbpath):
+            raise FileNotFoundError(f"Database file {dbpath} does not exist.")
         # Create a connection to the given database
         print("-"*50)
         print("Opening database {}.".format(dbpath))
@@ -172,9 +177,10 @@ class EMDBConnection:
         self.tables = [EMDBTable(cursor, t[0]) for t in cursor.fetchall()]
 
     def __del__(self):
-        print("Closing database.")
-        print("-"*50)
-        self.connection.close()
+        if self.connection:
+            print("Closing database.")
+            print("-"*50)
+            self.connection.close()
 
     def save_database(self):
         self.connection.commit()
@@ -248,6 +254,14 @@ class EMDBConnection:
                 table.print_sorted(statement)
         print("-"*50)
 
+    def show_comparison(self, table_name, ids, highlight=False):
+        for table in self.tables:
+            if table.name == table_name:
+                print("-"*50)
+                table.print_comparison(ids, highlight)
+                print("-"*50)
+                return
+
     def is_valid_column(self, column_name, table_name=""):
         """Check whether a column with the given name exists.
 
@@ -303,8 +317,11 @@ class EMDBTable:
 
     def get_data(self, column_name, condition=""):
         try:
-            self.c.execute(f'SELECT {column_name} FROM "{self.name}" WHERE {condition}' if condition else
-                           f'SELECT {column_name} FROM "{self.name}"')
+            self.c.execute(
+                f'SELECT {column_name} FROM "{self.name}" WHERE {condition}'
+                if condition else
+                f'SELECT {column_name} FROM "{self.name}"'
+            )
         except dbsys.OperationalError as e:
             print(f'SQL error for experiment "{self.name}":', e)
             return []
@@ -328,8 +345,7 @@ class EMDBTable:
 
     def print_selection(self, statement):
         try:
-            self.c.execute('SELECT * FROM "{}" WHERE {}'
-                           .format(self.name, statement))
+            self.c.execute('SELECT * FROM "{}" WHERE {}'.format(self.name, statement))
         except dbsys.OperationalError as e:
             print('SQL error for experiment "{}":'.format(self.name), e)
         else:
@@ -337,12 +353,46 @@ class EMDBTable:
 
     def print_sorted(self, statement):
         try:
-            self.c.execute('SELECT * FROM "{}" ORDER BY {}'
-                           .format(self.name, statement))
+            self.c.execute('SELECT * FROM "{}" ORDER BY {}'.format(self.name, statement))
         except dbsys.OperationalError as e:
             print('SQL error for experiment "{}":'.format(self.name), e)
         else:
             print(string_format_table(self.name, self.columns, self.c.fetchall()))
+
+    def print_comparison(self, ids, highlight=False):
+        try:
+            self.c.execute(
+                'SELECT * FROM "{}" WHERE id IN {}'.format(self.name, tuple(ids))
+                if ids else
+                'SELECT * FROM "{}"'.format(self.name)
+            )
+        except dbsys.OperationalError as e:
+            print('SQL error for experiment "{}":'.format(self.name), e)
+            return
+        full_entries = self.c.fetchall()
+        different_columns = []
+        for i, row in enumerate(full_entries):
+            if i == 0:
+                continue
+            for c, value in enumerate(row):
+                if c not in different_columns and value != full_entries[i-1][c]:
+                    different_columns.append(c)
+        if not highlight:
+            # Print only the columns of the table with differences
+            print(string_format_table(
+                self.name,
+                [col for c, col in enumerate(self.columns) if c in different_columns],
+                [
+                    [val for c, val in enumerate(row) if c in different_columns]
+                    for row in full_entries
+                ]
+            ))
+        else:
+            # Print the full table and highlight the columns with differences
+            print(string_format_table(
+                self.name, self.columns, full_entries,
+                [col[0] for c, col in enumerate(self.columns) if c in different_columns]
+            ))
 
     def set_comment(self, id_, new_comment):
         try:
@@ -369,8 +419,10 @@ class EMShell(cmd.Cmd):
         + "\n"
     )
     prompt = "(EMS) "
+    ruler = "-"
 
     def __init__(self, experiments_dir: str):
+        self.initialized = False
         super().__init__()
         print("-"*50)
         print("Fluid2d Experiment Management System (EMS)")
@@ -380,14 +432,16 @@ class EMShell(cmd.Cmd):
         self.selected_table = ""
         # Settings for saving the command history
         self.command_history_file = os.path.join(self.exp_dir, ".emshell_history")
-        self.command_history_length = 1000
+        readline.set_history_length(1000)
         # Load previously saved command history
         if os.path.exists(self.command_history_file):
             readline.read_history_file(self.command_history_file)
+        self.initialized = True
 
     def __del__(self):
-        readline.set_history_length(self.command_history_length)
-        readline.write_history_file(self.command_history_file)
+        if self.initialized:
+            print("Saving command history.")
+            readline.write_history_file(self.command_history_file)
 
     ### Functionality to MODIFY how the programme acts
     def do_enable(self, params):
@@ -572,6 +626,49 @@ class EMShell(cmd.Cmd):
     of the command.
 
     See also: filter, show.""")
+
+    def do_compare(self, params):
+        # Check the run condition
+        if not self.selected_table:
+            print('No experiment selected.  Select an experiment to make a comparison.')
+            return
+        # Parse the arguments
+        global display_all
+        display_all = False
+        highlight = False
+        other_params = []
+        for p in params.split():
+            if p == "-v":
+                display_all = True
+            elif p == "-h":
+                highlight = True
+            else:
+                other_params.append(p)
+        if other_params:
+            ids = self.parse_multiple_ids(other_params)
+            if ids is None:
+                return
+            if len(ids) < 2:
+                print("Please specify at least 2 different IDs.")
+                return
+        elif self.con.get_table_length(self.selected_table) < 2:
+            print("Selected experiment contains less than 2 entries.")
+            return
+        else:
+            # No IDs means no filtering, i.e., all entries are compared
+            ids = []
+        self.con.show_comparison(self.selected_table, ids, highlight)
+
+    def help_compare(self):
+        print("""> compare [IDs] [-h] [-v]
+    Show the difference between two or more entries of the selected experiment.
+    This prints a table which includes only the parameters in which the
+    specified entries differ.  Alternatively, add "-h" to show all parameters
+    and highlight the differences in colour.  Disabled columns are not shown by
+    default.  Add the argument "-v" to show disabled columns, the full date-time
+    and the full comment.  Instead of an ID, "last" or "-1" can be used to
+    compare with the entry of highest ID.  If no ID is specified, all entries of
+    the selected experiment class are compared.""")
 
     ### Functionality to OPEN experiment files
     def do_open_mp4(self, params):
@@ -996,26 +1093,11 @@ class EMShell(cmd.Cmd):
         if not params:
             print('No IDs given.  Specify at least one ID to remove its entry.')
             return
-
         # Parse parameters
-        ids = set()
-        for p in params.split():
-            if p == "last" or p == "-1":
-                id_ = self.con.get_highest_index(self.selected_table)
-                if id_ is None:
-                    print(f'No entries exist for the experiment class "{self.selected_table}".')
-                    return
-            else:
-                try:
-                    id_ = int(p)
-                except ValueError:
-                    print('Parameter', p, 'is not a valid ID.  No data removed.')
-                    return
-                if not self.con.entry_exists(self.selected_table, id_):
-                    print('No entry with ID', id_, 'exists in the selected table.  '
-                          'No data removed.')
-                    return
-            ids.add(id_)
+        ids = self.parse_multiple_ids(params.split())
+        if ids is None:
+            print("No data removed.")
+            return
 
         # Print full information of selected entries
         global display_all
@@ -1065,13 +1147,13 @@ class EMShell(cmd.Cmd):
             print('Answer was not "yes".  No data removed.')
 
     def help_remove(self):
-        print("""> remove <ID>
+        print("""> remove <IDs>
     Delete the entry with the given ID from the currently selected class of
     experiments and all files associated with it.  Multiple IDs can be specified
     to remove several entries and their folders at once.  Instead of an ID, the
-    value "last" can be used to choose the entry with the highest ID.  The value
-    "-1" is an alias for "last".  Before the data is deleted, the user is asked
-    to confirm, which must be answered with "yes".
+    argument "last" or "-1" can be used to choose the entry with the highest ID.
+    Before the data is deleted, the user is asked to confirm, which must be
+    answered with "yes".
     The remove an empty class of experiments, use "remove_selected_class".""")
 
     def do_remove_selected_class(self, params):
@@ -1240,7 +1322,7 @@ class EMShell(cmd.Cmd):
         if id_ == -1:
             id_ = self.con.get_highest_index(table_name)
             if id_ is None:
-                print(f'No entries exist for the experiment class "{table_name}".')
+                print(f'No entry exists for the experiment class "{table_name}".')
                 return None
         elif not self.con.entry_exists(table_name, id_):
             print(f'No entry with ID {id_} exists for the experiment class "{table_name}".')
@@ -1301,6 +1383,36 @@ class EMShell(cmd.Cmd):
         # Every other parameter is treated as an SQL condition to filter the data
         parameters["condition"] = " ".join(param_list).strip()
         return parameters
+
+    def parse_multiple_ids(self, param_list):
+        """Transform the given list of strings into a list of IDs.
+
+        This method also checks that the IDs are valid entries of the
+        selected database and returns None if an invalid ID is given.
+        Otherwise, a sorted list of unique values is returned.
+        It correctly parses "last" or "-1"."""
+        ids = []
+        for id_ in param_list:
+            if id_ == "last" or id_ == "-1":
+                id_ = self.con.get_highest_index(self.selected_table)
+                if id_ is None:
+                    print(f'No entry exists for the experiment class "{self.selected_table}".')
+                    return
+                elif id_ in ids:
+                    continue
+            else:
+                try:
+                    id_ = int(id_)
+                except ValueError:
+                    print('Parameter', id_, 'is not a valid ID.')
+                    return
+                if id_ in ids:
+                    continue
+                if not self.con.entry_exists(self.selected_table, id_):
+                    print('No entry with ID', id_, 'exists for the selected experiment.')
+                    return
+            ids.append(id_)
+        return sorted(ids)
 
     def open_file(self, command, path, verbose=False):
         if verbose:
@@ -1437,11 +1549,12 @@ def get_unique_save_filename(template):
     return filename
 
 
-def string_format_table(table_name, columns, rows):
+def string_format_table(table_name, columns, rows, highlight_columns=[]):
     # Get current date and time to make datetime easy to read
     if not ISO_DATETIME:
         dt_now = datetime.datetime.now()
-    # Convert rows to list of lists (because fetchall() returns a list of tuples)
+    # Convert rows to list of lists (because fetchall() returns a list of tuples
+    # and to work on a copy of it)
     rows = [list(row) for row in rows]
     # Remove ignored columns
     columns = columns.copy()
@@ -1517,8 +1630,8 @@ def string_format_table(table_name, columns, rows):
                 )
     if (
             COMMENT_MAX_LENGTH == "AUTO"
-            and "comment" not in hidden_information
             and not display_all
+            and "comment" == columns[-1][0]
     ):
         line_length = shutil.get_terminal_size().columns
         total_length = sum(lengths[:-1]) + len(LIMITER) * len(lengths[:-1])
@@ -1539,26 +1652,31 @@ def string_format_table(table_name, columns, rows):
     elif len(indices_to_remove) > 1:
         text += " ({} parameters hidden)".format(len(indices_to_remove))
     text += "\n"
-    # Add column name centred, except the last one
-    text += LIMITER.join([
-        ("{:^" + str(l) + "}").format(n)
-        for (n, t), l in zip(columns[:-1], lengths[:-1])
-    ] + [columns[-1][0]]) + "\n"
+    column_names_formatted = []
     format_strings = []
     for (n, t), l in zip(columns, lengths):
+        # Column names centred, except comment, since it is the last column.
+        cname_form = f"{n:^{l}}"
         # Numbers right justified,
-        # text centred,
-        # comments unformatted
+        # comments left justified,
+        # other texts centred.
         if n in ["size_diag", "size_flux", "size_his", "size_mp4", "size_total"]:
-            format_strings.append(SIZE_FORMAT.replace(":", ":>"+str(l)))
+            f_string = SIZE_FORMAT.replace(":", ":>"+str(l))
         elif t == "REAL":
-            format_strings.append(FLOAT_FORMAT.replace(":", ":>"+str(l)))
+            f_string = FLOAT_FORMAT.replace(":", ":>"+str(l))
         elif t == "INTEGER":
-            format_strings.append("{:>" + str(l) + "}")
+            f_string = "{:>" + str(l) + "}"
         elif n == "comment":
-            format_strings.append("{:" + str(l) + "}")
+            f_string = "{:" + str(l) + "}"
+            cname_form = n
         else:
-            format_strings.append("{:^" + str(l) + "}")
+            f_string = "{:^" + str(l) + "}"
+        if n in highlight_columns:
+            f_string = COLOURS_HIGHLIGHT + f_string + COLOURS_END
+            cname_form = COLOURS_HIGHLIGHT + cname_form + COLOURS_END
+        format_strings.append(f_string)
+        column_names_formatted.append(cname_form)
+    text += LIMITER.join(column_names_formatted) + "\n"
     if COLOURS:
         row_colours = itertools.cycle(COLOURS)
     for row in rows:
