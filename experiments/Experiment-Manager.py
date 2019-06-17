@@ -1549,7 +1549,7 @@ def get_unique_save_filename(template):
     return filename
 
 
-def string_format_table(table_name, columns, rows, highlight_columns=[]):
+def string_format_table(table_name, columns, rows, highlight_columns=None):
     # Get current date and time to make datetime easy to read
     if not ISO_DATETIME:
         dt_now = datetime.datetime.now()
@@ -1671,7 +1671,7 @@ def string_format_table(table_name, columns, rows, highlight_columns=[]):
             cname_form = n
         else:
             f_string = "{:^" + str(l) + "}"
-        if n in highlight_columns:
+        if highlight_columns is not None and n in highlight_columns:
             f_string = COLOURS_HIGHLIGHT + f_string + COLOURS_END
             cname_form = COLOURS_HIGHLIGHT + cname_form + COLOURS_END
         format_strings.append(f_string)
