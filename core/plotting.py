@@ -22,6 +22,14 @@ class Plotting(object):
                            'generate_mp4', 'myrank', 'modelname']
         param.copy(self, self.list_param)
 
+        if param.npx * param.npy > 1 and self.generate_mp4:
+            print(
+                'Warning: It is not possible to generate an mp4-file when '
+                'fluid2d runs on multiple cores.\n'
+                'The parameter generate_mp4 is automatically changed to False.'
+            )
+            self.generate_mp4 = False
+
         nh = self.nh
         nx = param.nx
         ny = param.ny
