@@ -184,7 +184,11 @@ class NcfileIO(object):
             # store all the parameters as NetCDF global attributes
             dparam = self.param.__dict__
             for k in dparam.keys():
-                if type(dparam[k]) == type([0, 1]):
+                if k == "ems":
+                    # The EMS stores itself and does not need to be stored in the netCDF file
+                    pass
+
+                elif type(dparam[k]) == type([0, 1]):
                     # it is not straightforward to store a list in a netcdf file
                     pass
 

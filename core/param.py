@@ -3,6 +3,9 @@ import os.path as path
 import sys
 import getopt
 
+# Local import
+import ems
+
 
 class Param(object):
     """class to set up the default parameters value of the model
@@ -17,7 +20,7 @@ class Param(object):
 
     """
 
-    def __init__(self, defaultfile):
+    def __init__(self, defaultfile=None, ems_file=""):
         """defaultfile is a sequel, it's no longer used the default file is
         systematically the defaults.json located in the fluid2d/core
 
@@ -41,6 +44,11 @@ class Param(object):
             self.print_param = True
         else:
             self.print_param = False
+
+        if ems_file:
+            self.ems = ems.EMS(ems_file)
+        else:
+            self.ems = None
 
     def set_parameters(self, namelist):
         avail = {}
@@ -76,6 +84,10 @@ class Param(object):
             self.man(p)
 
     def checkall(self):
+        if self.ems:
+            if self.myrank == 0:
+                self.ems.initialize(self.datadir)
+            self.expname = self.ems.get_expname()
         for p, avail in self.avail.items():
             if getattr(self, p) in avail:
                 # the parameter 'p' is well set
@@ -108,6 +120,18 @@ class Param(object):
             else:
                 missing.append(k)
         return missing
+
+    def get_experiment_parameters(self):
+        return self.ems.parameters
+
+    def loop_experiment_parameters(self):
+        while self.ems.parameters:
+            yield self.ems.parameters
+            self.ems.setup_next_parameters()
+
+    def finalize(self, fluid2d):
+        if self.ems:
+            self.ems.finalize(fluid2d)
 
 
 if __name__ == "__main__":

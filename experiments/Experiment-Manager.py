@@ -215,10 +215,10 @@ class EMDBConnection:
             if table.name == table_name:
                 return len(table)
 
-    def get_highest_index(self, table_name):
+    def get_latest_entry(self, table_name):
         for table in self.tables:
             if table.name == table_name:
-                return table.get_highest_index()
+                return table.get_latest_entry()
 
     def set_comment(self, table_name, id_, new_comment):
         for table in self.tables:
@@ -328,8 +328,8 @@ class EMDBTable:
         else:
             return [e[0] for e in self.c.fetchall()]
 
-    def get_highest_index(self):
-        self.c.execute('SELECT id from "{}" ORDER BY id DESC'.format(self.name))
+    def get_latest_entry(self):
+        self.c.execute('SELECT id from "{}" ORDER BY datetime DESC'.format(self.name))
         result = self.c.fetchone()
         self.c.fetchall()  # otherwise the database stays locked
         return result[0] if result else None
@@ -666,9 +666,9 @@ class EMShell(cmd.Cmd):
     specified entries differ.  Alternatively, add "-h" to show all parameters
     and highlight the differences in colour.  Disabled columns are not shown by
     default.  Add the argument "-v" to show disabled columns, the full date-time
-    and the full comment.  Instead of an ID, "last" or "-1" can be used to
-    compare with the entry of highest ID.  If no ID is specified, all entries of
-    the selected experiment class are compared.""")
+    and the full comment.  Instead of an ID, "last" can be used to compare with
+    the latest entry.  If no ID is specified, all entries of the selected
+    experiment class are compared.""")
 
     ### Functionality to OPEN experiment files
     def do_open_mp4(self, params):
@@ -1143,6 +1143,9 @@ class EMShell(cmd.Cmd):
                     print('Error deleting folder {}:'.format(folder), e)
                 else:
                     print('Deleted folder {}.'.format(folder))
+        elif answer == "no":
+            # Do nothing.
+            pass
         else:
             print('Answer was not "yes".  No data removed.')
 
@@ -1151,7 +1154,7 @@ class EMShell(cmd.Cmd):
     Delete the entry with the given ID from the currently selected class of
     experiments and all files associated with it.  Multiple IDs can be specified
     to remove several entries and their folders at once.  Instead of an ID, the
-    argument "last" or "-1" can be used to choose the entry with the highest ID.
+    argument "last" can be used to choose the latest entry.
     Before the data is deleted, the user is asked to confirm, which must be
     answered with "yes".
     The remove an empty class of experiments, use "remove_selected_class".""")
@@ -1288,8 +1291,7 @@ class EMShell(cmd.Cmd):
         """Parse and check input of the form "[experiment] <ID>".
 
         The argument "experiment" is optional, the ID is necessary.
-        Instead of an ID, "last" can be used to refer to the entry with
-        the highest ID.  The value "-1" is an alias for "last".
+        Instead of an ID, "last" can be used to refer to the latest entry.
         If no experiment is given, the selected experiment is taken.
         Return None and print a message if input is not valid, otherwise
         return the experiment name and the ID."""
@@ -1300,7 +1302,7 @@ class EMShell(cmd.Cmd):
         # Parse the ID
         specifier = params.pop()
         if specifier == "last":
-            id_ = -1
+            id_ = "last"
         else:
             try:
                 id_ = int(specifier)
@@ -1319,8 +1321,8 @@ class EMShell(cmd.Cmd):
                 return None
             table_name = self.selected_table
         # Check the ID
-        if id_ == -1:
-            id_ = self.con.get_highest_index(table_name)
+        if id_ == "last":
+            id_ = self.con.get_latest_entry(table_name)
             if id_ is None:
                 print(f'No entry exists for the experiment class "{table_name}".')
                 return None
@@ -1390,11 +1392,11 @@ class EMShell(cmd.Cmd):
         This method also checks that the IDs are valid entries of the
         selected database and returns None if an invalid ID is given.
         Otherwise, a sorted list of unique values is returned.
-        It correctly parses "last" or "-1"."""
+        It parses "last" as the latest entry."""
         ids = []
         for id_ in param_list:
-            if id_ == "last" or id_ == "-1":
-                id_ = self.con.get_highest_index(self.selected_table)
+            if id_ == "last":
+                id_ = self.con.get_latest_entry(self.selected_table)
                 if id_ is None:
                     print(f'No entry exists for the experiment class "{self.selected_table}".')
                     return
@@ -1534,8 +1536,7 @@ class EMShell(cmd.Cmd):
         print("""
     If only an ID and no experiment name is given, take the currently selected
     class of experiments.  Instead of an ID, the value "last" can be used to
-    choose the entry with the highest ID.  The value "-1" is an alias for
-    "last"."""
+    choose the latest entry."""
         )
 
 
