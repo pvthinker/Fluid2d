@@ -9,19 +9,21 @@ interest in an experiment, including the automation of running an
 experiment several times with different parameter values.  To prevent
 overwriting files, the EMS automatically assigns a unique identifier for
 every new run of an experiment.  However, if fluid2d runs on multiple
-cores, an ID has to be specified initially.
+cores, an initial ID has to be specified manually.
 
-Its usage is explained in detail in the experiment on breaking waves.
+The usage of the EMS is explained in detail in the experiment on waves,
+located in the folder `experiments/Waves with EMS` of fluid2d.
 
 With the EMShell, a command line interface is provided to access the
-experiment-database created by the EMS.
+experiment-database created by the EMS.  The EMShell is run via the file
+`Experiment-Manager.py` in the folder `ems` of fluid2d.
 
 Author: Markus Reinert, May/June 2019
 """
 
 import os
 import datetime
-import sqlite3 as dbsys
+import sqlite3
 from collections import namedtuple
 from itertools import product
 
@@ -213,7 +215,8 @@ class EMS:
         It writes the integration time and the sizes of the created
         output files into the database.  If a blow-up was detected, this
         is stored in the comment-field.  Furthermore, the datetime-field
-        of the database entry is set to the current time."""
+        of the database entry is set to the current time.
+        """
         if not self.connection:
             return
         # Divide every size by 1000*1000 = 1e6 to get the value in MB
@@ -295,7 +298,7 @@ class EMS:
             os.makedirs(data_dir)
         dbpath = os.path.join(data_dir, "experiments.db")
         print(" Opening database {}.".format(dbpath))
-        self.connection = dbsys.connect(dbpath)
+        self.connection = sqlite3.connect(dbpath)
         self.cursor = self.connection.cursor()
 
     def table_exists(self, name: str):
@@ -314,8 +317,9 @@ def parse_experiment_file(path: str):
 
     An experiment file
      - must provide a name,
-     - can provide a description,
-     - can provide parameters with values.
+     - can provide an ID,
+     - can provide a multi-line description,
+     - can provide parameters with one or several values each.
 
     The name is written in a line starting with "Name:".  It must be a
     valid string to be used as a filename;  in particular, it must not
@@ -328,20 +332,23 @@ def parse_experiment_file(path: str):
     the end of the file.
 
     The parameters follow after a line starting with "Parameters:".
-    Every parameter is written in its own line.  This line contains a
-    name and one value or several values, each separated by one or
-    several whitespaces.  The name must not contain any whitespace
-    characters (otherwise it is not recognised as such) and must not
-    contain a quotation mark.  The name must not be in the list of
-    reserved column names.  If the value is True, False, an integer or a
-    floation point number, it is interpreted as the corresponding Python
-    type, otherwise it is considered a string.  Quotation marks in the
-    value are taken literally and are not interpreted.
+    Every parameter is written in its own line.  This line begins with
+    the name of the parameter followed by one value or several values,
+    separated by one or several spaces or tabs.  The name must not
+    contain any whitespace characters (otherwise it is not recognised as
+    one name) and must not contain a quotation mark.  The name must not
+    be in the list of reserved column names.  The datatype of the value
+    must be unambiguous, i.e., the values True and False are interpreted
+    as Boolean variables, numbers like 3 are treated as integers,
+    numbers like 3.14 or 1e3 (=1000) are treated as floats and all other
+    values are taken as strings literally.  If a string contains a
+    whitespace, this is considered as multiple values for one parameter
+    and not as a string of multiple words.
 
     Everything after a #-symbol is considered a comment and ignored.
 
     TODO:
-     - allow to use quotation marks for multi-word strings as values
+     - use of quotation marks for multi-word strings in values
     """
     with open(path) as f:
         experiment_lines = f.readlines()
@@ -353,7 +360,7 @@ def parse_experiment_file(path: str):
     reading_params = False
     reading_description = False
     for line in experiment_lines:
-        # Remove comments and whitespace at the beginning and the end
+        # Remove comments as well as leading and trailing whitespace
         line = line.split("#")[0].strip()
         if not line:
             # Skip empty lines except in the description
@@ -367,9 +374,7 @@ def parse_experiment_file(path: str):
                 if '"' in name:
                     raise ExpFileError("Name must not contain a quotation mark.")
             else:
-                raise ExpFileError(
-                    "Name defined more than once."
-                )
+                raise ExpFileError("Name defined more than once.")
         elif line.lower().startswith("id:"):
             if id_ is None:
                 value = line[3:].strip()
@@ -424,6 +429,11 @@ def sql_type(value):
 
 
 def sql_value(value):
+    """Cast into a type suitable for writing the value in a databse.
+
+    This returns for Boolean variables a string representing the given
+    value and returns the value unchanged otherwise.
+    """
     if isinstance(value, bool):
         return str(value)
     return value
@@ -433,7 +443,8 @@ def cast_string(value: str):
     """Cast into the most specialised Python type possible.
 
     This method can recognize "True", "False", integers and floats,
-    everything else is treated as a string and returned unchanged."""
+    everything else is treated as a string and returned unchanged.
+    """
     if value == "True":
         return True
     if value == "False":

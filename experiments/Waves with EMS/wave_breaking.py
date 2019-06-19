@@ -1,32 +1,36 @@
 """Fluid2d-experiment with EMS: wave breaking at the coast (Python file)
 
-This file aims to be both, an interesting experiment and a helpful
-introduction to the Experiment Management System (EMS) of fluid2d.
+This file, together with its corresponding experiment file, aims to be
+both, an interesting experiment and a helpful introduction to the
+Experiment Management System (EMS) of fluid2d.
 
 Compared to a simple fluid2d experiment without EMS, three changes are
 necessary to profit from the full functionality of the EMS:
 
  1. Create Param by specifying the path to the experiment file.
- 2. Fetch the experiment parameters from Param.
+ 2. Fetch and use the experiment parameters from Param.
  3. Call the finalize-method of Param at the end.
 
-Furthermore, the line with param.expname should be removed, since the
-EMS takes care of setting the filename of the experiment.
+Furthermore, the variable `param.expname` should not be set in the
+Python file, since the EMS takes care of setting it.  In this way, the
+loss of old output files by accidentally replacing them is avoided.
+Nevertheless, it is possible to explicitly ask the EMS to replace old
+experiments.  See the experiment file for more details.
 
 When the Experiment Management System is activated like this, an entry
-in the experiment-database is created.  This entry contains the unique
-ID of the experiment, the date and time of the run, the last point in
-time before the integration stopped, the sizes of the output files in
-MB, a comment or description and -- most importantly -- the parameters
-that are chosen by the user to keep track off.  These parameters are
-defined in the experiment file.  After the EMS is set-up, only the
-experiment file needs to be changed by the user.  Thanks to the EMS,
-it is not necessary to modify the Python file more than once at the
-beginning.
+in the experiment-database is created.  The database is stored in the
+same directory as the output of the experiments, which is defined in
+`param.datadir`.  Every entry contains the unique ID of the experiment,
+the date and time of the run, the last point in time of the integration,
+the sizes of the output files in MB, a comment or description and
+-- most importantly -- the parameters that are chosen by the user to
+keep track off.  These parameters are defined in the experiment file.
+After the EMS is set-up, only the experiment file needs to be changed by
+the user.  Thanks to the EMS, it is not necessary to modify the Python
+file more than once at the beginning to set it up.
 
 Author: Markus Reinert, April/May/June 2019
 """
-
 
 from fluid2d import Fluid2d
 from param import Param
@@ -37,8 +41,7 @@ import numpy as np
 
 ### STEP 1
 # Load default parameter values, load specific parameters from the given
-# experiment file and set-up the EMS.  It is advised to specify the experiment
-# file explicitly with the keyword `ems_file` like this:
+# experiment file and set-up the EMS.
 param = Param(ems_file="wave_breaking.exp")
 
 # Do not set `param.expname` because it will be ignored.
@@ -54,13 +57,16 @@ param = Param(ems_file="wave_breaking.exp")
 # specified in the experiment file, use
 #   for EP in param.loop_experiment_parameters():
 # and put the rest of the Python file within this loop by indenting every line.
+# The behaviour of both ways is the same if only one value is given for every
+# parameter in the experiment file.  Therefore it is recommended to use the
+# multi-run implementation, since it is more versatile.
 #
 # In both cases, the dictionary EP is now available.  Its keys are the names
 # of the parameters in the experiment file.  Every key refers to the
 # corresponding value.  If multiple values are given in the experiment file,
 # in every iteration of the loop, another combination of these values is in EP.
-# Within the following lines of the Python code, the values of the EP are used
-# to implement the desired behaviour of the experiment.
+# Within the following lines of Python code, the values of the EP are used to
+# implement the desired behaviour of the experiment.
 for EP in param.loop_experiment_parameters():
     # Set model type, domain type, size and resolution
     param.modelname = "boussinesq"
@@ -70,10 +76,12 @@ for EP in param.loop_experiment_parameters():
     param.Ly = 2
     param.Lx = 3 * param.Ly
     # Set number of CPU cores used
+    # Remember to set a fixed (initial) ID in the experiment file, if multiple
+    # cores are used.
     param.npx = 1
     param.npy = 1
 
-    # Set time settings
+    # Use a fixed time stepping for a constant framerate in the mp4-file
     param.tend = 20.0
     param.adaptable_dt = False
     param.dt = 0.02
@@ -120,7 +128,7 @@ for EP in param.loop_experiment_parameters():
     f2d = Fluid2d(param, grid)
     model = f2d.model
 
-    # Set initial perturbation of the surface (or interface)
+    # Set initial perturbation of the interface
     buoy = model.var.get("buoyancy")
     buoy[:] = 1
     if EP["perturbation"].lower() == "sin":

@@ -1,7 +1,7 @@
 # Fluid2d-experiment with EMS: wave breaking at the coast (experiment file)
 #
 # Refer to the documentation of `ems.parse_experiment_file` for a
-# detailed description of the format of experiment files.
+# detailed description of the experiment file format.
 #
 # Author: Markus Reinert, May/June 2019
 
@@ -19,7 +19,7 @@ Name: Breaking_Waves
 # The ID is automatically increased by 1 for every new combination if multiple values are
 # given for one or several parameters.
 # Uncomment the following line to set an ID manually:
-#ID: 24
+#ID: 21
 
 
 # Descriptions are optional.
@@ -52,4 +52,4 @@ x_start 4.0
 perturbation gauss
 # height and width of the perturbation
 intensity  0.5
-sigma      0.2 0.4
+sigma      0.4 0.8
