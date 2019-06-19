@@ -117,7 +117,8 @@ class EMS:
         ]
         new_columns = (
             static_columns_start
-            + [DBColumn(sql_type(val), name, val) for name, val in self.parameters.items()]
+            + [DBColumn(sql_type(self.parameters[name]), name, self.parameters[name])
+               for name in self.param_name_list]
             + static_columns_end
         )
         # If the table exists, check its columns, otherwise create it
@@ -150,14 +151,13 @@ class EMS:
             #  - allow to skip columns which are no longer needed
             #  - allow to add new columns if needed
             #  - allow to convert types
-            for name, val in self.parameters.items():
+            for name in self.param_name_list:
                 column = columns.pop(0)
                 col_index = column[0]
                 col_name = column[1]
                 col_type = column[2]
-                type_ = sql_type(val)
+                type_ = sql_type(self.parameters[name])
                 if col_name != name or col_type != type_:
-                    print(repr(val), sql_type(val))
                     raise InputMismatch(
                         "parameter {} of type {} does not fit into column {} "
                         "with name {} and type {}."
