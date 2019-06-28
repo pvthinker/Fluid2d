@@ -1,7 +1,7 @@
+import numpy as np
 from operators import Operators
 from variables import Var
 from timescheme import Timescheme
-import numpy as np
 from importlib import import_module
 import fortran_diag as fd
 import fortran_advection as fa
@@ -62,11 +62,12 @@ class Euler(object):
 
         # for timescheme
         self.tscheme = Timescheme(param, self.var.state)
-        self.tscheme.set(self.advection, self.timestepping)
+        self.tscheme.set(self.dynamics, self.timestepping)
 
         if self.forcing:
             if self.forcing_module == 'embedded':
-                print('Warning: check that you have indeed added the forcing to the model')
+                print(
+                    'Warning: check that you have indeed added the forcing to the model')
                 print('Right below the line    : model = f2d.model')
                 print('you should have the line: model.forc = Forcing(param, grid)')
 
@@ -77,10 +78,15 @@ class Euler(object):
                 except ImportError:
                     print('module %s for forcing cannot be found'
                           % self.forcing_module)
-                    print('make sure file **%s.py** exists' % self.forcing_module)
+                    print('make sure file **%s.py** exists' %
+                          self.forcing_module)
                     exit(0)
                 self.forc = f.Forcing(param, grid)
 
+        if self.spongelayer:
+            # sponge layer zone [0 = full sponge, 1 = no sponge]
+            self.spongemsk = (1-(1+np.tanh((self.xr - self.Lx)/0.1))*0.5)
+            
         self.diags = {}
 
         if self.customized:
@@ -96,7 +102,7 @@ class Euler(object):
 
     def step(self, t, dt):
 
-        # 1/ integrate advection
+        # 1/ integrate dynamics
         self.tscheme.forward(self.var.state, t, dt)
 
         # 2/ integrate source
@@ -131,40 +137,44 @@ class Euler(object):
 
         if self.spongelayer:
             # 4/ sponge layer
-            damping = (1-(1+np.tanh((self.xr - self.Lx)/0.1))*0.5)
             w = self.var.get('vorticity')
-            w *= damping
+            w *= self.spongemsk
             if 'dye' in self.var.varname_list:
-                dye *= damping
+                dye *= self.spongemsk
             if 'age' in self.var.varname_list:
-                age *= damping
+                age *= self.spongemsk
 
-        self.set_psi_from_vorticity()
+        #self.set_psi_from_vorticity()
 
-    def advection(self, x, t, dxdt):
+    def dynamics(self, x, t, dxdt):
+        """Compute the tendency terms + invert the streamfunction"""
+
         self.timers.tic('rhs_adv')
-        
         self.ope.rhs_adv(x, t, dxdt)
         self.timers.toc('rhs_adv')
+
         if (self.tscheme.kstage == self.tscheme.kforcing):
             if self.forcing:
                 self.forc.add_forcing(x, t, dxdt)
+
             if self.diffusion:
                 self.ope.rhs_diffusion(x, t, dxdt)
-        else:
-            self.timers.tic('invert')
-            self.ope.invert_vorticity(dxdt, flag='fast')
-            self.timers.toc('invert')
+
+                #        else:
+        self.timers.tic('invert')
+        self.ope.invert_vorticity(dxdt, flag='fast')
+        self.timers.toc('invert')
 
     def add_noslip(self, x):
         self.timers.tic('noslip')
         source = self.var.get('source')
         self.ope.rhs_noslip(x, source)
         self.timers.toc('noslip')
+
         # if not(self.enforce_momentum):
-        #     self.timers.tic('invert')
-        #     self.ope.invert_vorticity(x, flag='fast', island=self.isisland)
-        #     self.timers.toc('invert')
+        self.timers.tic('invert')
+        self.ope.invert_vorticity(x, flag='fast', island=self.isisland)
+        self.timers.toc('invert')
 
     def set_psi_from_vorticity(self):
         self.ope.invert_vorticity(self.var.state, island=self.isisland)

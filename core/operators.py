@@ -15,14 +15,14 @@ class Operators(Param):
                            'qgoperator', 'order', 'Kdiff',
                            'enforce_momentum', 'isisland', 'aparab',
                            'flux_splitting_method', 'hydroepsilon',
-                           'myrank']
+                           'myrank', 'geometry']
 
         param.copy(self, self.list_param)
 
         self.list_grid = ['msk', 'nxl', 'nyl', 'dx', 'dy',
                           'bcarea', 'mpitools', 'msknoslip',
                           'mskbc', 'domain_integration',
-                          'nh', 'xr0', 'yr0', 'i0', 'j0']
+                          'nh', 'xr0', 'yr0', 'i0', 'j0', 'area']
 
         grid.copy(self, self.list_grid)
         self.first_time = True
@@ -393,7 +393,8 @@ class Operators(Param):
         psi = x[ip]
 
         fo.celltocorner(x[iw], self.work)
-        if island and self.first_time:
+        if island:
+            # correcting RHS for islands
             self.work[:, :] -= self.rhsp
 
         if flag == 'fast':
@@ -424,18 +425,23 @@ class Operators(Param):
                                       {'maxite': 4,
                                        'tol': 1e-11,
                                        'verbose': verbose})
+            if self.geometry == 'perio':
+                # make sure psi has zero mean (to avoid the drift)
+                psim = self.domain_integration(psi) / self.area
+                psi -= psim
+        
 
         # don't apply the fill_halo on it
-        # [because fill_halo as it is is applying periodic BC]
+        # [because fill_halo, as it is, is applying periodic BC]
         psi = psi*self.mskp
-        if island and self.first_time:
+        if island:
             # we set psi on the boundary values by adding
             # self.psi (defined in island module)
             # before that line, psi=0 along all boundaries
             psi += self.psi
             # it should be added only if we invert for the total psi
             # it should not be added if we compute the increment of psi
-            # TODO: make it more robust than a test on "first_time"
+
 
         self.first_time = False
             
