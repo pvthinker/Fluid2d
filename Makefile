@@ -16,6 +16,6 @@ clean:
 
 
 zip:	
-	cd .. ; zip -r fluid2d/fluid2d_`date '+%d_%m_%Y'`.zip fluid2d/Makefile fluid2d/README fluid2d/activate.sh fluid2d/LICENSE fluid2d/INSTALL fluid2d/requirements.txt fluid2d/setup.py fluid2d/core fluid2d/experiments/ fluid2d/docs  -x \*.so \*~ \*.pyc \*.nc \.* \*checkpoint* \*pycache* \*.rst \*.png
+	cd .. ; zip -r fluid2d/fluid2d_`date '+%d_%m_%Y'`.zip fluid2d/Makefile fluid2d/README fluid2d/activate.* fluid2d/LICENSE fluid2d/INSTALL fluid2d/requirements.txt fluid2d/setup.py fluid2d/core fluid2d/experiments/ fluid2d/docs  -x \*.so \*~ \*.pyc \*.nc \.* \*checkpoint* \*pycache* \*.rst \*.png
 
 
