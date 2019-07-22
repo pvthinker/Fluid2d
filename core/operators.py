@@ -36,7 +36,8 @@ class Operators(Param):
               'omega': 8./9., 'npmpmax': 1, 'verbose': False,
               'dx': grid.dx, 'dy': grid.dy, 'n1': 32, 'n0': 4,
               'method': 'deep', 'nagglo': 2,
-              'hydroepsilon': param.hydroepsilon, 'relaxation': param.relaxation}
+              'hydroepsilon': param.hydroepsilon,
+              'relaxation': param.relaxation}
 
         # load the multigrid solver
         #

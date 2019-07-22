@@ -105,7 +105,7 @@ class Fluid2d(object):
         if self.plot_interactive:
             try:
                 p = import_module(self.plotting_module)
-                print(self.plotting_module)
+                # print(self.plotting_module)
             except ImportError:
                 print('problem with the interactive plotting')
                 print('this might be due to a backend issue')
