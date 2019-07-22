@@ -7,6 +7,7 @@
                 "advection",
                 "euler",
                 "boussinesq",
+                "boussinesqTS",
                 "quasigeostrophic",
                 "thermalwind"
             ],
@@ -52,6 +53,15 @@
                 "parabolic"
             ],
             "doc": "Advective Flux Splitting Method. 'minmax' is the usual basic one, 'parabolic' is a regularized one that provides better solutions"
+        },
+        "relaxation": {
+            "type": "str",
+            "default": "default",
+            "avail": [
+                "default",
+                "tridiagonal"
+            ],
+            "doc": "Select the relaxation operator for the multigrid. Default is a double Jacobi iteration. Tridiagonal uses a tridiagonal solver in the y direction. This latter case is used for grids with small aspect ratio dy<=0.2*dx. To determine which one of the relaxation is the best, monitor the convergence rate of the multigrid."
         },
         "nh": {
             "type": "int",

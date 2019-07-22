@@ -73,6 +73,10 @@ class Fluid2d(object):
             from boussinesq import Boussinesq
             self.model = Boussinesq(param, grid)
 
+        if param.modelname == 'boussinesqTS':
+            from boussinesqTS import BoussinesqTS
+            self.model = BoussinesqTS(param, grid)
+
         if param.modelname == 'quasigeostrophic':
             from quasigeostrophic import QG
             self.model = QG(param, grid)

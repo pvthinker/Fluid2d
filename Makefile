@@ -4,7 +4,6 @@ PYTHON = python
 F2PY   = f2py
 
 
-
 %.so : %.f90 ; $(F2PY) -m $* -c $< --opt='-O3 -fPIC'
 
 
@@ -16,6 +15,6 @@ clean:
 
 
 zip:	
-	cd .. ; zip -r fluid2d/fluid2d_`date '+%d_%m_%Y'`.zip fluid2d/Makefile fluid2d/README fluid2d/activate.* fluid2d/LICENSE fluid2d/INSTALL fluid2d/requirements.txt fluid2d/setup.py fluid2d/core fluid2d/experiments/ fluid2d/docs  -x \*.so \*~ \*.pyc \*.nc \.* \*checkpoint* \*pycache* \*.rst \*.png
+	cd .. ; zip -r Fluid2d/Fluid2d_`date '+%d_%m_%Y'`.zip Fluid2d/Makefile Fluid2d/README* Fluid2d/activate.* Fluid2d/LICENSE Fluid2d/INSTALL Fluid2d/requirements.txt Fluid2d/setup.py Fluid2d/core Fluid2d/experiments/ Fluid2d/docs  -x \*.so \*~ \*.pyc \*.nc \.* \*checkpoint* \*pycache* \*.rst \*.png
 
 
