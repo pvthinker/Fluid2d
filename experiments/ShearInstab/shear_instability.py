@@ -44,7 +44,7 @@ param.forcing = False
 param.noslip = False
 param.diffusion = False
 param.additional_tracer = ['tracer']
-
+param.diag_fluxes = True
 
 grid = Grid(param)
 param.Kdiff = 2e-4*grid.dx

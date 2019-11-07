@@ -17,10 +17,10 @@ import ana_profiles as ap
 
 param = Param('default.xml')
 param.modelname = 'euler'
-param.expname = 'vortex_00'
+param.expname = 'vortex_08'
 
 # domain and resolution
-param.nx = 64
+param.nx = 64*2
 param.ny = param.nx
 param.Ly = param.Lx
 param.npx = 1
@@ -28,16 +28,17 @@ param.npy = 1
 param.geometry = 'closed'
 
 # time
-param.tend = 20.
-param.cfl = 1.5
+param.tend = 10
+param.cfl = 1.
 param.adaptable_dt = True
 param.dt = 0.01
 param.dtmax = 100
 
 # discretization
-param.order = 5
+param.order = 3
 param.timestepping = 'RK3_SSP'
 param.exacthistime = True
+param.diag_fluxes = True
 
 # output
 param.var_to_save = ['vorticity', 'psi', 'tracer']

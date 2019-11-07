@@ -55,17 +55,23 @@ class BoussinesqTS(object):
         self.tscheme.set(self.dynamics, self.timestepping)
 
         if self.forcing:
-            if hasattr(self, 'forcing_module'):
-                f = import_module(self.forcing_module)
-                self.forc = f.Forcing(param, grid)
+            if self.forcing_module == 'embedded':
+                print('Warning: check that you have indeed added the forcing to the model')
+                print('Right below the line    : model = f2d.model')
+                print('you should have the line: model.forc = Forcing(param, grid)')
+
+                pass
             else:
-                if self.myrank == 0:
-                    print('-'*50)
-                    print('did not find an external forcing module')
-                    print('make sure file you define a class Forcing() in your script')
-                    print('and that you attach it.')
-                    print('You should have the following line before f2d.loop()')
-                    print('model.forc = Forcing(param, grid)')
+                try:
+                    f = import_module(self.forcing_module)
+
+                except ImportError:
+                    print('module %s for forcing cannot be found'
+                          % self.forcing_module)
+                    print('make sure file **%s.py** exists' % self.forcing_module)
+                    sys.exit(0)
+
+                self.forc = f.Forcing(param, grid)
 
         self.diags = {}
 

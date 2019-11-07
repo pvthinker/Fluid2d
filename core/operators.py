@@ -411,6 +411,7 @@ class Operators(Param):
         psi = x[ip]
 
         fo.celltocorner(x[iw], self.work)
+        #fo.celltocornerbicubic(x[iw], self.work)
         if island:
             # correcting RHS for islands
             self.work[:, :] -= self.rhsp

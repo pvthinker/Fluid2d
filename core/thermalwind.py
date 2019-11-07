@@ -49,15 +49,24 @@ class Thermalwind(Param):
         self.tscheme = Timescheme(param, self.var.state)
 
         if self.forcing:
-            try:
-                f = import_module(self.forcing_module)
-            except:
-                print('module %s for forcing cannot be found'
-                      % self.forcing_module)
-                print('make sure file **%s.py** exists' % self.forcing_module)
-                exit(0)
+            if self.forcing_module == 'embedded':
+                print('Warning: check that you have indeed added the forcing to the model')
+                print('Right below the line    : model = f2d.model')
+                print('you should have the line: model.forc = Forcing(param, grid)')
 
-            self.forc = f.Forcing(param, grid)
+                pass
+            else:
+                try:
+                    f = import_module(self.forcing_module)
+
+                except ImportError:
+                    print('module %s for forcing cannot be found'
+                          % self.forcing_module)
+                    print('make sure file **%s.py** exists' % self.forcing_module)
+                    sys.exit(0)
+
+                self.forc = f.Forcing(param, grid)
+
 
         self.diags = {}
 
@@ -68,10 +77,10 @@ class Thermalwind(Param):
         self.tscheme.forward(self.var.state, t, dt)
 
         # 2/ integrate source
-        if self.forcing or self.noslip:
-            self.tscheme.set(self.sources, 'EF')
-            self.tscheme.forward(self.var.state, t, dt)
+        if self.noslip:
+            self.add_noslip(self.var.state)
 
+        self.set_psi_from_vorticity()
         self.compute_pv()
 
     def compute_pv(self):
@@ -89,18 +98,21 @@ class Thermalwind(Param):
     def dynamics(self, x, t, dxdt):
         self.ope.rhs_adv(x, t, dxdt)
         self.ope.rhs_thermalwind(x, t, dxdt)  # add the r.h.s. terms
+
         if (self.tscheme.kstage == self.tscheme.kforcing):
             if self.forcing:
                 self.forc.add_forcing(x, t, dxdt)
+
             if self.diffusion:
                 self.ope.rhs_diffusion(x, t, dxdt)
 
-        self.ope.invert_vorticity(dxdt, flag='fast')
+        else:
+            self.ope.invert_vorticity(dxdt, flag='fast')
 
     def sources(self, x, t, dxdt):
         if self.noslip:
             self.ope.rhs_noslip(x, t, dxdt)
-            self.ope.invert_vorticity(x, flag='full')
+            #self.ope.invert_vorticity(x, flag='full')
 
     def set_psi_from_vorticity(self):
         self.ope.invert_vorticity(self.var.state)

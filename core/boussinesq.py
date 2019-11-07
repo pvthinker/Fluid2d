@@ -52,17 +52,24 @@ class Boussinesq(object):
         self.tscheme.set(self.dynamics, self.timestepping)
 
         if self.forcing:
-            if hasattr(self, 'forcing_module'):
-                f = import_module(self.forcing_module)
-                self.forc = f.Forcing(param, grid)
+            if self.forcing_module == 'embedded':
+                self.msg_forcing = (
+                    'To make Fluid2d aware of your embedded forcing\n'
+                    +'you need to add in the user script \n'
+                    +'model.forc = Forcing(param, grid)\n'
+                    +'right below the line: model = f2d.model' )
+
+                pass
             else:
-                if self.myrank == 0:
-                    print('-'*50)
-                    print('did not find an external forcing module')
-                    print('make sure file you define a class Forcing() in your script')
-                    print('and that you attach it.')
-                    print('You should have the following line before f2d.loop()')
-                    print('model.forc = Forcing(param, grid)')
+                try:
+                    f = import_module(self.forcing_module)
+                except ImportError:
+                    print('module %s for forcing cannot be found'
+                          % self.forcing_module)
+                    print('make sure file **%s.py** exists' %
+                          self.forcing_module)
+                    exit(0)
+                self.forc = f.Forcing(param, grid)
 
         self.diags = {}
 
@@ -99,6 +106,7 @@ class Boussinesq(object):
         if (self.tscheme.kstage == self.tscheme.kforcing):
             coef = self.tscheme.dtcoef
             if self.forcing:
+                assert hasattr(self, 'forc'), self.msg_forcing
                 self.forc.add_forcing(x, t, dxdt, coef=coef)
             if self.diffusion:
                 self.ope.rhs_diffusion(x, t, dxdt, coef=coef)

@@ -144,7 +144,7 @@ class Euler(object):
             if 'age' in self.var.varname_list:
                 age *= self.spongemsk
 
-        #self.set_psi_from_vorticity()
+        self.set_psi_from_vorticity()
 
     def dynamics(self, x, t, dxdt):
         """Compute the tendency terms + invert the streamfunction"""
@@ -160,10 +160,13 @@ class Euler(object):
             if self.diffusion:
                 self.ope.rhs_diffusion(x, t, dxdt)
 
-                #        else:
-        self.timers.tic('invert')
-        self.ope.invert_vorticity(dxdt, flag='fast')
-        self.timers.toc('invert')
+            if self.diffusion or self.forcing:
+                self.ope.invert_vorticity(dxdt, flag='fast')
+        else:
+            self.timers.tic('invert')
+            self.ope.invert_vorticity(dxdt, flag='fast')
+            #self.ope.invert_vorticity(dxdt)
+            self.timers.toc('invert')
 
     def add_noslip(self, x):
         self.timers.tic('noslip')
