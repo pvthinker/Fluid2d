@@ -48,11 +48,11 @@ param.ny = param.nx
 param.Ly = param.Lx
 param.npx = 1
 param.npy = 1
-param.geometry = 'perio'
+param.geometry = 'closed'
 
 # time
 param.tend = 100.
-param.cfl = 1.5
+param.cfl = 1.2
 param.adaptable_dt = True
 param.dt = 1.
 param.dtmax = .5
@@ -79,10 +79,11 @@ param.generate_mp4 = True
 # you may activate the forcing defined above
 # it is a white noise forcing with some time correlation
 # such forcing is often used in turbulence studies
-param.forcing = True
+param.forcing = False
 param.decay = False  # set it to False if forcing == True
 param.noslip = False
 param.diffusion = False
+param.diag_fluxes = True
 
 # add a passive tracer
 param.additional_tracer = ['tracer']

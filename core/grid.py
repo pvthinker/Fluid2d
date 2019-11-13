@@ -98,6 +98,7 @@ class Grid(Param):
             r = np.sqrt((self.xr/self.Lx-0.5)**2 + (self.yr/self.Ly-0.5)**2)
             self.msk[r >= 0.5] = 0
 
+        self.msknoslip = self.msk.copy()
         self.finalize_msk()
 
     def finalize_msk(self):
@@ -105,7 +106,7 @@ class Grid(Param):
 
         should be after the mask array has been touched"""
         msk = self.msk
-        self.msknoslip = self.msk.copy()
+        #self.msknoslip = self.msk.copy()-self.msknoslip
 
         self.area = self.domain_integration(msk)
 

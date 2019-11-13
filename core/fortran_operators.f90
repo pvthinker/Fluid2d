@@ -64,6 +64,41 @@
       end subroutine
 
 !----------------------------------------
+      subroutine celltocornerbicubic(xr,xp,n,m)
+
+! average 4x4 cell centers at upper right cell corner
+! using the finite difference interpolation [-1,9,9,1]/16 in each direction
+ 
+      implicit none
+
+      integer,intent(in):: n,m
+      real*8,dimension(m,n) :: xr,xp
+
+!f2py intent(inplace)::xr,xp
+      real:: cff
+      integer:: i,j,jj,k1,k2,k3,k4
+      real*8,dimension(n,4)::z
+
+      cff = 1./12.
+      do j=1,m
+         k1 = mod(j-1,4)+1
+         do i=2,n-2
+            z(i,k1)=cff*(-xr(j,i-1)+7*(xr(j,i)+xr(j,i+1))-xr(j,i+2))
+         enddo
+         if (j.ge.4)then
+            k2 = mod(j-2,4)+1
+            k3 = mod(j-3,4)+1
+            k4 = mod(j-4,4)+1
+            jj = j-2
+            do i=2,n-2
+               xp(jj,i)=cff*(-z(i,k1)+7*(z(i,k2)+z(i,k3))-z(i,k4))
+            enddo
+         endif
+      enddo
+
+      end subroutine
+
+!----------------------------------------
       subroutine cornertocell(xp,xr,n,m)
 
 ! average 4 cell centers at upper right cell corner

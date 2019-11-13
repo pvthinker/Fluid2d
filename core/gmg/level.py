@@ -5,24 +5,24 @@
 ############################################################
 try:
     from mpi4py import MPI
-    #print('- mpi4py : found')
+    # print('- mpi4py : found')
 except:
     print('- mpi4py : not found, please install it')
     exit(0)
 
 from numpy import zeros, arange, sqrt, array, meshgrid, ones, concatenate, unique, random, pi, int8, size, isnan, exp, NaN, asarray
 from time import time
-#from fortran_multigrid import *
+# from fortran_multigrid import *
 from gmg.subdomains import *
 from gmg.halo import *
 import sys
-#from misc_mpi import *
-#from plotutils import plot2d
-#from analyticals import *
+# from misc_mpi import *
+# from plotutils import plot2d
+# from analyticals import *
 
 
 def Gridinfo(param):
-    """ return the gridinfo vector 
+    """ return the gridinfo vector
     defining a hierarchy of grids
     """
     comm = MPI.COMM_WORLD
@@ -42,6 +42,7 @@ def Gridinfo(param):
     nagglo = param['nagglo']
     omega = param['omega']
     verbose = param['verbose']
+    relaxation = param['relaxation']
     if 'hydroepsilon' in param.keys():
         hydroepsilon = param['hydroepsilon']
     else:
@@ -93,11 +94,13 @@ def Gridinfo(param):
         if 'qgoperator' in param.keys():
             gridinfo.append({'n': n, 'm': m, 'np': np, 'mp': mp, 'np0': np0, 'mp0': mp0, 'omega': omega,
                              'qgoperator': True, 'Rd': param['Rd'],
-                             'nh': nh, 'ix': ix, 'iy': iy, 'dx': dx, 'dy': dy, 'flag': flag, 'lev': lev})
+                             'nh': nh, 'ix': ix, 'iy': iy, 'dx': dx, 'dy': dy, 'flag': flag, 'lev': lev,
+                             'relaxation': relaxation})
         else:
             gridinfo.append({'n': n, 'm': m, 'np': np, 'mp': mp, 'np0': np0, 'mp0': mp0, 'omega': omega,
                              'qgoperator': False,
-                             'nh': nh, 'ix': ix, 'iy': iy, 'dx': dx, 'dy': dy, 'flag': flag, 'lev': lev, 'hydroepsilon': hydroepsilon})
+                             'nh': nh, 'ix': ix, 'iy': iy, 'dx': dx, 'dy': dy, 'flag': flag, 'lev': lev,
+                             'hydroepsilon': hydroepsilon, 'relaxation': relaxation})
 
         if myrank == 0 and verbose:
             print("Level %2i: %5ix%5i / Procs %2ix%2i  / ix,iy=%i,%i / dx=%3.3f / Flag= %s"
@@ -145,10 +148,10 @@ class Grid(object):
         self.np0 = np0
         self.mp0 = mp0
         self.lev = gridinfo['lev']
+        self.relaxation = gridinfo['relaxation']
 
-        self.relaxation = 'default'
         aspect_ratio = self.hydroepsilon*self.dy/self.dx
-        if (aspect_ratio < 0.2):
+        if (aspect_ratio <= .2):
             if self.mp0 > 1:
                 if (myrank == 0):
                     raise ValueError(
@@ -158,6 +161,8 @@ class Grid(object):
                     print('Small aspect ratio detected')
                     print('Activating the tridiagonal solver for the relaxation')
                 self.relaxation = 'tridiagonal'
+        if (myrank == 0) and (self.lev == 0):
+            print('Multigrid relaxation: %s' % self.relaxation)
 
         self.myrank = myrank
 
@@ -260,15 +265,18 @@ class Grid(object):
         by = self.dx/self.dy
         a = -2*(bx+by)
         stencil = array([[c, by, c], [bx, a, bx], [c, by, c]]).astype(float)
-        
+
         # 9 points 2D Laplacian stencil [the factor 1/2 is weird but
         # in practice it should be here].
 
         if self.dx == self.dy:
             if self.myrank == 0:
                 print('  => use the nine points stencil')
-            a,b,c = -6./2, 1./2, 0.5/2
+            a, b, c = -6./2, 1./2, 0.5/2
             stencil = array([[c, b, c], [b, a, b], [c, b, c]]).astype(float)
+        else:
+            if self.myrank == 0:
+                print('  => use the five points stencil')
 
         Afinest = zeros((self.mv, self.nv, 9))
         I, J = meshgrid(arange(self.nv-2)+1, arange(self.mv-2)+1)

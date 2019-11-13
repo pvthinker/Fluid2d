@@ -27,12 +27,16 @@ class Fluid2d(object):
                 os.makedirs(param.expdir)
             savedscript = '%s/%s.py' % (param.expdir, param.expname)
             outfile = '%s/output.txt' % param.expdir
+            if os.path.exists(outfile):
+                print('Warning: this experiment has already been ran, output.txt already exists')
+                print('dummy.txt will be used instead')
+                outfile = '%s/dummy.txt' % param.expdir
+            
             sys.stdout = Logger(outfile)
 
-            if launchscript == savedscript:
-                print('Warning: the python script already exists')
-                print('in %s' % param.exdir)
-                print('I won''t overwrite it')
+            if os.path.exists(savedscript):
+                print('Warning: the python script already exists in %s' % param.expdir)
+                print('the script won''t be copied')
                 pass
             else:
                 self.savedscript = savedscript
@@ -73,6 +77,10 @@ class Fluid2d(object):
             from boussinesq import Boussinesq
             self.model = Boussinesq(param, grid)
 
+        if param.modelname == 'boussinesqTS':
+            from boussinesqTS import BoussinesqTS
+            self.model = BoussinesqTS(param, grid)
+
         if param.modelname == 'quasigeostrophic':
             from quasigeostrophic import QG
             self.model = QG(param, grid)
@@ -101,7 +109,7 @@ class Fluid2d(object):
         if self.plot_interactive:
             try:
                 p = import_module(self.plotting_module)
-                print(self.plotting_module)
+                # print(self.plotting_module)
             except ImportError:
                 print('problem with the interactive plotting')
                 print('this might be due to a backend issue')
@@ -153,6 +161,9 @@ class Fluid2d(object):
                 print('-'*50)
                 print(' You may recover all the experiment parameters by doing')
                 print(' ncdump -h %s' % self.output.hisfile)
+                print('')
+                print(' or browse the history file by doing')
+                print(' ncview %s' % self.output.hisfile)
                 print('-'*50)                                
 
         if self.print_param and (self.myrank == 0) and start:

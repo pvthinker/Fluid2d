@@ -114,7 +114,8 @@ class QG(object):
         if self.noslip:
             self.add_noslip(self.var.state)
 
-        self.set_psi_from_pv()
+        # self.set_psi_from_pv()
+        
         # 3/ diagnostic fields
         self.var.state[self.ipva] = self.var.state[self.ipv] - self.pvback
         self.var.state[self.ivor] = (self.var.state[self.ipva]

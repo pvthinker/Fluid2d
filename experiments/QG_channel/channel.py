@@ -3,11 +3,15 @@ from grid import Grid
 from fluid2d import Fluid2d
 import numpy as np
 
-""" Reentrant channel with prescribed transport through the channel. The transport is controlled via psi0, the streamfunction at the North Wall -- psi=0 on the South Wall. An island with psi=psi0/2 is also set in the middle of the channel. Even though there is no explicit forcing, this setup creates an island wake. Parameter controls include:
+""" Reentrant channel with prescribed transport through the
+channel. The transport is controlled via psi0, the streamfunction at
+the North Wall -- psi=0 on the South Wall. An island with psi=psi0/2
+is also set in the middle of the channel. Even though there is no
+explicit forcing, this setup creates an island wake. Control parameters
+include:
 
-- Rd/L, relative size of the deformation radius
-- beta Rd^2 L / psi0, relative importance of the jet speed vs Rossby wave speed
-""" 
+- Rd/L, relative size of the deformation radius beta Rd^2 L / psi0,
+- relative importance of the jet speed vs Rossby wave speed """
 
 param = Param('default.xml')
 param.modelname = 'quasigeostrophic'
@@ -19,7 +23,7 @@ param.ny = param.nx/4
 param.npy = 1
 param.Lx = 4.
 param.Ly = param.Lx/4
-param.geometry = 'xperio'
+param.geometry = 'xchannel'
 
 # time
 param.tend = 5000.
@@ -51,23 +55,25 @@ param.generate_mp4 = False
 param.beta = 1.
 param.Rd = .1
 param.forcing = False
-param.forcing_module = 'forcing' # not yet implemented
+param.forcing_module = 'forcing'  # not yet implemented
 param.noslip = False
 param.diffusion = False
-param.isisland=True
+param.isisland = True
 
-psi0 = -5e-4 # this sets psi on the Northern wall (psi=0 on the Southern wall)
+psi0 = -5e-4  # this sets psi on the Northern wall (psi=0 on the Southern wall)
 
 grid = Grid(param)
 
 nh = grid.nh
 
+
 def disc(param, grid, x0, y0, sigma):
     """ function to set up a circular island
     note that this function returns the indices, not the mask """
     xr, yr = grid.xr, grid.yr
-    r = np.sqrt( (xr-param.Lx*x0)**2+(yr-param.Ly*y0)**2 )
-    return np.where(r<=sigma)
+    r = np.sqrt((xr-param.Lx*x0)**2+(yr-param.Ly*y0)**2)
+    return np.where(r <= sigma)
+
 
 sigma = 0.08
 idx = disc(param, grid, 0.125*param.Lx, 0.5, sigma)
@@ -104,7 +110,7 @@ yr0 = grid.yr0
 pv = model.var.get('pv')
 
 # first, let's put some noise on the pv
-np.random.seed(1) # to ensure reproducibility of the results
+np.random.seed(1)  # to ensure reproducibility of the results
 y = 1e-4*np.random.normal(size=np.shape(pv))*grid.msk
 model.ope.fill_halo(y)
 pv[:] = y

@@ -7,8 +7,8 @@ import fortran_advection as fa
 import numpy as np
 
 
-class Boussinesq(object):
-    """ Boussinesq model
+class BoussinesqTS(object):
+    """ Boussinesq model with temperature and salinity
 
     It provides the step(t,dt) function
     and 'var' containing the mode state
@@ -17,6 +17,7 @@ class Boussinesq(object):
     def __init__(self, param, grid):
 
         self.list_param = ['forcing', 'noslip', 'timestepping',
+                           'alphaT', 'betaS',
                            'diffusion', 'Kdiff', 'myrank',
                            'forcing_module', 'gravity', 'isisland',
                            'customized', 'custom_module', 'additional_tracer']
@@ -28,8 +29,8 @@ class Boussinesq(object):
 
         # for variables
         param.varname_list = ['vorticity',
-                              'psi', 'u', 'v', 'buoyancy', 'banom']
-        param.tracer_list = ['vorticity', 'buoyancy']
+                              'psi', 'u', 'v', 'density', 'danom', 'T', 'S']
+        param.tracer_list = ['vorticity', 'T', 'S']
         param.whosetspsi = ('vorticity')
 
         if hasattr(self, 'additional_tracer'):
@@ -38,10 +39,12 @@ class Boussinesq(object):
                 param.varname_list.append(trac)
                 param.tracer_list.append(trac)
 
+        self.varname_list = param.varname_list
+        
         param.sizevar = [grid.nyl, grid.nxl]
         self.var = Var(param)
-        bref = self.var.get('buoyancy').copy()
-        self.bref = bref
+        dref = self.var.get('density').copy()
+        self.dref = dref
         self.source = np.zeros(param.sizevar)
 
         # for operators
@@ -53,22 +56,21 @@ class Boussinesq(object):
 
         if self.forcing:
             if self.forcing_module == 'embedded':
-                self.msg_forcing = (
-                    'To make Fluid2d aware of your embedded forcing\n'
-                    +'you need to add in the user script \n'
-                    +'model.forc = Forcing(param, grid)\n'
-                    +'right below the line: model = f2d.model' )
+                print('Warning: check that you have indeed added the forcing to the model')
+                print('Right below the line    : model = f2d.model')
+                print('you should have the line: model.forc = Forcing(param, grid)')
 
                 pass
             else:
                 try:
                     f = import_module(self.forcing_module)
+
                 except ImportError:
                     print('module %s for forcing cannot be found'
                           % self.forcing_module)
-                    print('make sure file **%s.py** exists' %
-                          self.forcing_module)
-                    exit(0)
+                    print('make sure file **%s.py** exists' % self.forcing_module)
+                    sys.exit(0)
+
                 self.forc = f.Forcing(param, grid)
 
         self.diags = {}
@@ -88,7 +90,8 @@ class Boussinesq(object):
 
         # 1/ integrate advection
         self.tscheme.forward(self.var.state, t, dt)
-
+        self.set_density()
+        
         # 2/ integrate source
         if self.noslip:
             self.add_noslip(self.var.state)
@@ -96,27 +99,38 @@ class Boussinesq(object):
         if self.customized:
             self.extrastep.do(self.var, t, dt)
 
-        banom = self.var.get('banom')
-        banom[:, :] = self.var.get('buoyancy')-self.bref
+        danom = self.var.get('danom')
+        danom[:, :] = self.var.get('density')-self.dref
 
     def dynamics(self, x, t, dxdt):
         self.ope.rhs_adv(x, t, dxdt)
+        self.eos(dxdt)
         # db/dx is a source term for the vorticity
-        self.ope.rhs_torque(x, t, dxdt)
+        self.ope.rhs_torque_density(x, t, dxdt)
         if (self.tscheme.kstage == self.tscheme.kforcing):
             coef = self.tscheme.dtcoef
             if self.forcing:
-                assert hasattr(self, 'forc'), self.msg_forcing
                 self.forc.add_forcing(x, t, dxdt, coef=coef)
             if self.diffusion:
                 self.ope.rhs_diffusion(x, t, dxdt, coef=coef)
-
+        self.eos(dxdt)
         self.ope.invert_vorticity(dxdt, flag='fast')
 
     def add_noslip(self, x):
         self.ope.rhs_noslip(x, self.source)
         self.ope.invert_vorticity(x, flag='fast', island=self.isisland)
 
+    def eos(self, x):
+        """ compute density from T and S """
+        idens = self.varname_list.index('density')
+        itemp = self.varname_list.index('T')
+        isalt = self.varname_list.index('S')
+
+        x[idens] = -self.alphaT*x[itemp] + self.betaS*x[isalt]
+
+    def set_density(self):
+        self.eos(self.var.state)
+            
     def set_psi_from_vorticity(self):
         self.ope.invert_vorticity(self.var.state, island=self.isisland)
 
@@ -127,16 +141,16 @@ class Boussinesq(object):
         u = var.get('u')
         v = var.get('v')
         vort = var.get('vorticity')
-        buoy = var.get('buoyancy')
+        dens = var.get('density')
 
         ke, maxu = fd.computekemaxu(self.msk, u, v, self.nh)
 
         z, z2 = fd.computesumandnorm(self.msk, vort, self.nh)
 
-        b, b2 = fd.computesumandnorm(self.msk, buoy, self.nh)
+        b, b2 = fd.computesumandnorm(self.msk, dens, self.nh)
 
-        #  potential energy (minus sign because buoyancy is minus density)
-        pe = - self.gravity * fd.computesum(self.msk, buoy*self.yr, nh)
+        #  potential energy
+        pe = + self.gravity * fd.computesum(self.msk, dens*self.yr, nh)
 
         cst = self.mpitools.local_to_global([(maxu, 'max'), (ke, 'sum'),
                                              (z, 'sum'), (z2, 'sum'),
@@ -149,5 +163,5 @@ class Boussinesq(object):
         self.diags['energy'] = (cst[1]+cst[4]) / self.area
         self.diags['vorticity'] = cst[2] / self.area
         self.diags['enstrophy'] = 0.5*cst[3] / self.area
-        self.diags['buoyancy'] = cst[5] / self.area
-        self.diags['brms'] = np.sqrt(cst[6] / self.area-(cst[5]/self.area)**2)
+        self.diags['density'] = cst[5] / self.area
+        self.diags['drms'] = np.sqrt(cst[6] / self.area-(cst[5]/self.area)**2)

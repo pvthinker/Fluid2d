@@ -12,17 +12,17 @@ class Operators(Param):
         self.list_param = ['varname_list', 'tracer_list',
                            'whosetspsi', 'mpi', 'npx', 'npy',
                            'nh', 'gravity', 'f0', 'beta', 'Rd',
-                           'qgoperator', 'order', 'Kdiff',
+                           'qgoperator', 'order', 'Kdiff', 'diffusion',
                            'enforce_momentum', 'isisland', 'aparab',
                            'flux_splitting_method', 'hydroepsilon',
-                           'myrank']
+                           'myrank', 'geometry']
 
         param.copy(self, self.list_param)
 
         self.list_grid = ['msk', 'nxl', 'nyl', 'dx', 'dy',
                           'bcarea', 'mpitools', 'msknoslip',
                           'mskbc', 'domain_integration',
-                          'nh', 'xr0', 'yr0', 'i0', 'j0']
+                          'nh', 'xr0', 'yr0', 'i0', 'j0', 'area']
 
         grid.copy(self, self.list_grid)
         self.first_time = True
@@ -36,7 +36,8 @@ class Operators(Param):
               'omega': 8./9., 'npmpmax': 1, 'verbose': False,
               'dx': grid.dx, 'dy': grid.dy, 'n1': 32, 'n0': 4,
               'method': 'deep', 'nagglo': 2,
-              'hydroepsilon': param.hydroepsilon}
+              'hydroepsilon': param.hydroepsilon,
+              'relaxation': param.relaxation}
 
         # load the multigrid solver
         #
@@ -147,6 +148,9 @@ class Operators(Param):
             self.Kdiff = {}
             for trac in self.tracer_list:
                 self.Kdiff[trac] = K
+        if self.diffusion:
+            print('diffusion coefficients')
+            print('  => ', self.Kdiff)
 
     def set_boundary_msk(self):
         """ for the no slip boundary source term """
@@ -307,6 +311,20 @@ class Operators(Param):
         self.fill_halo(y)
         dxdt[iw][:, :] = y
 
+    def rhs_torque_density(self, x, t, dxdt):
+        """ compute g*db/dx for the Boussinesq model """
+        ib = self.varname_list.index('density')
+        iw = self.varname_list.index('vorticity')
+
+        y = dxdt[iw]
+        b = x[ib]
+        #y[1:-1, 1:-1] += self.gravity*self.diffx(b)
+        # y *= self.msk
+        # trick: use -gravity to account that density is opposite to buoyancy
+        fo.add_torque(self.msk, b, self.dx, self.nh, -self.gravity, y)
+        self.fill_halo(y)
+        dxdt[iw][:, :] = y
+
     def diffx(self, x):
         nh = self.nh
         if self.i0 == self.npx-1:
@@ -360,7 +378,7 @@ class Operators(Param):
         # dw[1:-1, 1:-1] -= self.coefV[1:-1, 1:-1]*self.diffz(V)*self.f0
         # dw[:, :nh+1] = 0
         # dw[:, -nh-1:] = 0
-        y *= self.msk
+        y *= self.msk        
         self.fill_halo(y)
         dw[:, :] += y
 
@@ -393,7 +411,9 @@ class Operators(Param):
         psi = x[ip]
 
         fo.celltocorner(x[iw], self.work)
-        if island and self.first_time:
+        #fo.celltocornerbicubic(x[iw], self.work)
+        if island:
+            # correcting RHS for islands
             self.work[:, :] -= self.rhsp
 
         if flag == 'fast':
@@ -424,18 +444,23 @@ class Operators(Param):
                                       {'maxite': 4,
                                        'tol': 1e-11,
                                        'verbose': verbose})
+            if self.geometry == 'perio':
+                # make sure psi has zero mean (to avoid the drift)
+                psim = self.domain_integration(psi) / self.area
+                psi -= psim
+        
 
         # don't apply the fill_halo on it
-        # [because fill_halo as it is is applying periodic BC]
+        # [because fill_halo, as it is, is applying periodic BC]
         psi = psi*self.mskp
-        if island and self.first_time:
+        if island:
             # we set psi on the boundary values by adding
             # self.psi (defined in island module)
             # before that line, psi=0 along all boundaries
             psi += self.psi
             # it should be added only if we invert for the total psi
             # it should not be added if we compute the increment of psi
-            # TODO: make it more robust than a test on "first_time"
+
 
         self.first_time = False
             
