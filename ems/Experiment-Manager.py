@@ -590,8 +590,14 @@ class EMShell(cmd.Cmd):
      - filter datetime >= "2019-03-21"
      - filter perturbation != "gauss" AND duration > 20
     It is necessary to put the value for string, datetime or boolean argument
-    in quotation marks as shown.
-    To sort the filtered experiments, use SQLite syntax.
+    in quotation marks as shown.  The command
+     - filter Kdiff
+    shows all entries where Kdiff is non-zero, whereas the command
+     - filter NOT Kdiff
+    shows all entries where Kdiff is zero, following the usual Python convention
+    that zero is interpreted as False.  Note that this does not work for boolean
+    variables in the database, since they are saved as strings.
+    To sort the filtered experiments, use SQLite syntax, as in the following
     Examples:
      - filter intensity > 0.1 ORDER BY intensity
      - filter perturbation != "gauss" ORDER BY size_total DESC
