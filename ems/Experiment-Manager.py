@@ -1054,7 +1054,10 @@ class EMShell(cmd.Cmd):
     ### Functionality to MODIFY the entries
     def do_new_comment(self, params):
         # Check and parse parameters
-        table_name, id_ = self.parse_params_to_experiment(params)
+        experiment_name_id = self.parse_params_to_experiment(params)
+        if experiment_name_id is None:
+            return
+        table_name, id_ = experiment_name_id
         # Print the current entry fully
         global display_all
         display_all = True
