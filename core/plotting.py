@@ -20,7 +20,17 @@ class Plotting(object):
                            'plot_psi', 'cmap', 'plot_pvback',
                            'plot_ua', 'nh', 'expdir',
                            'generate_mp4', 'myrank', 'modelname']
-        param.copy(self, self.list_param)
+        missing_params = param.copy(self, self.list_param)
+        if "cax" in missing_params:
+            if self.colorscheme == "imposed":
+                raise ValueError(
+                    'colorscheme is set to "imposed" but no colorscale is '
+                    'given.  Define param.cax = [<min_value>, <max_value>] or '
+                    'use colorscheme "minmax" or "symmetric".'
+                )
+            else:
+                # Define a dummy cax to prevent create_fig from failing
+                self.cax = [None, None]
 
         nh = self.nh
         nx = param.nx
