@@ -246,6 +246,11 @@
             "default": "all",
             "doc": "List of variables names that we want to output in the diagnostic file. The variables names have to be consistent with the model. If 'all', store them all."
         },
+        "custom_diag": {
+            "type": "str",
+            "default": "none",
+            "doc": "Dictionary of custom diagnostics that are added to the diagnostic file. The keys are the names under which the diagnostics are saved. The values of the dictionary are functions that are called at every time diagnostics are evaluated. The functions take as only argument the current state of the model and return a single value (float)."
+        },
         "nprint": {
             "type": "int",
             "default": 20,
