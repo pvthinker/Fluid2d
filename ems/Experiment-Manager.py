@@ -1,53 +1,63 @@
-"""EMShell: Command-line interface for the EMS of fluid2d
+"""EMShell: Command-line interface for the EMS of Fluid2D
 
-EMS is the Experiment Management System of fluid2d, a powerful and
+EMS is the Experiment Management System of Fluid2D, a powerful and
 convenient way to handle big sets of experiments, cf. core/ems.py.
 The EMShell is a command line interface to access, inspect, modify
 and analyse the database and its entries.
 
-To start this programme, activate fluid2d, then run this script with
+To start this programme, activate Fluid2D, then run this script with
 Python (version 3.6 or newer).  Alternatively, without the need to
-activate fluid2d, specify the path to the experiment folder as a
+activate Fluid2D, specify the path to the experiment folder as a
 command-line argument when launching this script with Python.
 
 This code uses f-strings, which were introduced in Python 3.6:
-  https://docs.python.org/3/whatsnew/3.6.html#whatsnew36-pep498
+https://docs.python.org/3/whatsnew/3.6.html#whatsnew36-pep498
 Unfortunately, they create a SyntaxError in older Python versions.
 
 It is possible to access the experiment database from multiple
 processes at the same time, so one can add new entries to the database
-with the EMS of fluid2d while looking at the database and performing
+with the EMS of Fluid2D while looking at the database and performing
 data analysis in the EMShell;  the EMShell shows automatically the
 updated version of the database.  However, this works less well if the
 database is accessed by processes on different computers.  In this
 case it can be necessary to restart the EMShell to see changes in the
 database.  It is always necessary to restart the EMShell when a new
-class of experiments was added to the database.
+class of experiments (a new table) was added to the database.
 
-Author: Markus Reinert, May/June 2019
+Author: Markus Reinert, May/June 2019, June 2020
 """
 
+# Standard library imports
 import os
 import re
 import sys
 import cmd
 import time
-import numpy as np
 import shutil
-import sqlite3 as dbsys
+import sqlite3
 import datetime
 import readline
 import itertools
 import subprocess
-import matplotlib.pyplot as plt
-# Local imports
+
+# Optional matplotlib import
+try:
+    import matplotlib
+    # Before importing pyplot, choose the Qt5Agg backend of matplotlib,
+    # which allows to modify graphs and labels in a figure manually.
+    # If this causes problems, comment or change the following line.
+    matplotlib.use("Qt5Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import LinearSegmentedColormap
+except Exception as e:
+    print("Warning: matplotlib cannot be imported:", e)
+    print("Some functionality is deactivated.")
+    print("Install matplotlib to use all the features of the EMShell.")
+    matplotlib = None
+
+# Local import
 import EMShellExtensions as EMExt
 
-
-# Command to open mp4-files
-MP4_PLAYER = "mplayer"
-# Command to open NetCDF (his or diag) files
-NETCDF_VIEWER = "ncview"
 
 ### Extensions
 # Make new shell extensions available by adding them to this dictionary.
@@ -60,15 +70,21 @@ extra_tools = {
     "wavelength": lambda hisname: 1/EMExt.get_strongest_wavenumber_y(hisname),
 }
 
+### External programmes called by the EMShell
+# Command to open mp4-files
+MP4_PLAYER = "mplayer"
+# Command to open NetCDF (his or diag) files
+NETCDF_VIEWER = "ncview"
+
 ### Settings for the output of a table
-# Maximal length of comments (possible values: "AUTO", "FULL" or a positive integer)
+# Maximal length of comments (possible values: "AUTO", "FULL", or a positive integer)
 # This setting is ignored if display_all is True.
 COMMENT_MAX_LENGTH = "AUTO"
 # Format-string for real numbers
 FLOAT_FORMAT = "{:.4f}"
 # Format-string for file sizes (MB) or disk space (GiB)
 # Two decimals are used instead of three, to avoid confusion between the dot as
-# a decimal separator and a delimiter after 1000.
+# a decimal separator and the dot as a delimiter after 1000.
 SIZE_FORMAT = "{:.2f}"
 # Symbol to separate two columns of the table
 LIMITER = "  "
@@ -116,7 +132,7 @@ COLOURS_HIGHLIGHT = "\033[103m"
 COLOURS_END = "\033[39;49m"
 
 
-### Language settings (currently only for dates in easy-to-read-format)
+### Language settings (applies currently only for dates in easy-to-read-format)
 # Definition of languages
 class English:
     JUST_NOW = "just now"
@@ -143,6 +159,21 @@ class German:
 LANG = English
 
 
+# Defintion of a new colormap "iridescent" by Paul Tol
+# (https://personal.sron.nl/~pault/#fig:scheme_iridescent)
+if matplotlib:
+    iridescent = LinearSegmentedColormap.from_list(
+        "iridescent",
+        ['#FEFBE9', '#FCF7D5', '#F5F3C1', '#EAF0B5', '#DDECBF',
+         '#D0E7CA', '#C2E3D2', '#B5DDD8', '#A8D8DC', '#9BD2E1',
+         '#8DCBE4', '#81C4E7', '#7BBCE7', '#7EB2E4', '#88A5DD',
+         '#9398D2', '#9B8AC4', '#9D7DB2', '#9A709E', '#906388',
+         '#805770', '#684957', '#46353A']
+    )
+    iridescent.set_bad('#999999')
+    iridescent_r = iridescent.reversed()
+
+
 ### Global variables modifiable during runtime
 # Hide the following information in the table
 # They can be activated with the command "enable" during runtime.
@@ -162,13 +193,15 @@ class EMDBConnection:
     """Experiment Management Database Connection"""
 
     def __init__(self, dbpath: str):
+        """Establish a connection to the database in dbpath and initialise all tables."""
         self.connection = None
         if not os.path.isfile(dbpath):
             raise FileNotFoundError(f"Database file {dbpath} does not exist.")
+
         # Create a connection to the given database
         print("-"*50)
         print("Opening database {}.".format(dbpath))
-        self.connection = dbsys.connect(dbpath)
+        self.connection = sqlite3.connect(dbpath)
         cursor = self.connection.cursor()
 
         # Get all tables of the database
@@ -177,6 +210,7 @@ class EMDBConnection:
         self.tables = [EMDBTable(cursor, t[0]) for t in cursor.fetchall()]
 
     def __del__(self):
+        """Close the connection to the database (if any)."""
         if self.connection:
             print("Closing database.")
             print("-"*50)
@@ -185,7 +219,11 @@ class EMDBConnection:
     def save_database(self):
         self.connection.commit()
 
+    def delete_table(self, table_name):
+        self.connection.execute(f'DROP TABLE "{table_name}"')
+
     def get_table_overview(self):
+        """Return a text with metadata about the tables in the database."""
         if self.tables:
             text = "Experiments in database:"
             for table in self.tables:
@@ -198,107 +236,44 @@ class EMDBConnection:
             text = "No experiments in database."
         return text
 
-    def get_data(self, table_name, column_name, condition=""):
-        for table in self.tables:
-            if table_name == table.name:
-                return table.get_data(column_name, condition)
-        print(f'No table with name {table_name} found.')
-        return []
-
-    def get_column_names(self, table_name):
-        for table in self.tables:
-            if table.name == table_name:
-                return [n for n,t in table.columns]
-
-    def get_table_length(self, table_name):
-        for table in self.tables:
-            if table.name == table_name:
-                return len(table)
-
-    def get_latest_entry(self, table_name):
-        for table in self.tables:
-            if table.name == table_name:
-                return table.get_latest_entry()
-
-    def set_comment(self, table_name, id_, new_comment):
-        for table in self.tables:
-            if table.name == table_name:
-                return table.set_comment(id_, new_comment)
-        print(f'Unknown experiment: "{table_name}"')
-        return False
-
-    def show_all_tables(self):
-        for table in self.tables:
-            print("-"*50)
-            print(table)
-
-    def show_table(self, name):
-        print("-"*50)
-        for table in self.tables:
-            if table.name == name:
-                print(table)
-                return
-        print('Unknown experiment: "{}"'.format(name))
-
-    def show_filtered_table(self, table_name, statement):
-        for table in self.tables:
-            if table.name == table_name or table_name == "":
-                print("-"*50)
-                table.print_selection(statement)
-        print("-"*50)
-
-    def show_sorted_table(self, table_name, statement):
-        for table in self.tables:
-            if table.name == table_name or table_name == "":
-                print("-"*50)
-                table.print_sorted(statement)
-        print("-"*50)
-
-    def show_comparison(self, table_name, ids, highlight=False):
-        for table in self.tables:
-            if table.name == table_name:
-                print("-"*50)
-                table.print_comparison(ids, highlight)
-                print("-"*50)
-                return
-
-    def is_valid_column(self, column_name, table_name=""):
-        """Check whether a column with the given name exists.
-
-        If no table_name is specified, check whether any table has such
-        a column, otherwise look only in the table with the given name."""
-        for table in self.tables:
-            if table.name == table_name or table_name == "":
-                for n, t in table.columns:
-                    if column_name == n:
-                        return True
-        return False
-
-    def table_exists(self, table_name):
+    def is_valid_table(self, table_name):
+        """Check if a table with the given name exists."""
         for table in self.tables:
             if table.name == table_name:
                 return True
         return False
 
-    def entry_exists(self, table_name, id_):
+    def is_valid_column(self, column_name):
+        """Check if a column with the given name exists in any table."""
+        for table in self.tables:
+            for n, t in table.columns:
+                if column_name == n:
+                    return True
+        return False
+
+    def get_all_column_names(self):
+        """Return a list of the names of all columns in all tables."""
+        return [n for table in self.tables for n, t in table.columns]
+
+    def do(self, function, table_name, *args, **kwargs):
+        """Call a function on a table specified by its name and return the result.
+
+        This method calls function(table, *args, **kwargs), where table
+        is the EMDBTable object with the name table_name, and returns
+        the result of this function call.  If no table with the given
+        name exists, then a warning is printed and None is returned.
+        """
         for table in self.tables:
             if table.name == table_name:
-                return table.entry_exists(id_)
-
-    def delete_entry(self, table_name, id_):
-        for table in self.tables:
-            if table.name == table_name:
-                table.delete_entry(id_)
-                return
-
-    def delete_table(self, table_name):
-        self.connection.execute(f'DROP TABLE "{table_name}"')
+                return function(table, *args, **kwargs)
+        print('No table exists with name "{}".'.format(table_name))
+        return None
 
 
 class EMDBTable:
     """Experiment Management Database Table"""
 
-    def __init__(self, cursor: dbsys.Cursor, name: str):
+    def __init__(self, cursor: sqlite3.Cursor, name: str):
         self.name = str(name)
         self.c = cursor
         # Get columns
@@ -307,7 +282,7 @@ class EMDBTable:
         # column[0]: index from 0, column[1]: name, column[2]: type
 
     def __str__(self):
-        # Get entries
+        """Return a text representation of all entries formated as a table."""
         self.c.execute('SELECT * from "{}"'.format(self.name))
         return string_format_table(self.name, self.columns, self.c.fetchall())
 
@@ -322,17 +297,24 @@ class EMDBTable:
                 if condition else
                 f'SELECT {column_name} FROM "{self.name}"'
             )
-        except dbsys.OperationalError as e:
+        except sqlite3.OperationalError as e:
             print(f'SQL error for experiment "{self.name}":', e)
             return []
         else:
             return [e[0] for e in self.c.fetchall()]
 
+    def get_column_names(self):
+        return [n for n, t in self.columns]
+
     def get_latest_entry(self):
         self.c.execute('SELECT id from "{}" ORDER BY datetime DESC'.format(self.name))
         result = self.c.fetchone()
         self.c.fetchall()  # otherwise the database stays locked
-        return result[0] if result else None
+        if result:
+            return result[0]
+        else:
+            print('Table "{}" is empty.'.format(self.name))
+            return None
 
     def entry_exists(self, id_):
         self.c.execute('SELECT id FROM "{}" WHERE id = ?'.format(self.name), (id_,))
@@ -346,7 +328,7 @@ class EMDBTable:
     def print_selection(self, statement):
         try:
             self.c.execute('SELECT * FROM "{}" WHERE {}'.format(self.name, statement))
-        except dbsys.OperationalError as e:
+        except sqlite3.OperationalError as e:
             print('SQL error for experiment "{}":'.format(self.name), e)
         else:
             print(string_format_table(self.name, self.columns, self.c.fetchall()))
@@ -354,7 +336,7 @@ class EMDBTable:
     def print_sorted(self, statement):
         try:
             self.c.execute('SELECT * FROM "{}" ORDER BY {}'.format(self.name, statement))
-        except dbsys.OperationalError as e:
+        except sqlite3.OperationalError as e:
             print('SQL error for experiment "{}":'.format(self.name), e)
         else:
             print(string_format_table(self.name, self.columns, self.c.fetchall()))
@@ -366,7 +348,7 @@ class EMDBTable:
                 if ids else
                 'SELECT * FROM "{}"'.format(self.name)
             )
-        except dbsys.OperationalError as e:
+        except sqlite3.OperationalError as e:
             print('SQL error for experiment "{}":'.format(self.name), e)
             return
         full_entries = self.c.fetchall()
@@ -385,13 +367,13 @@ class EMDBTable:
                 [
                     [val for c, val in enumerate(row) if c in different_columns]
                     for row in full_entries
-                ]
+                ],
             ))
         else:
             # Print the full table and highlight the columns with differences
             print(string_format_table(
                 self.name, self.columns, full_entries,
-                [col[0] for c, col in enumerate(self.columns) if c in different_columns]
+                [col[0] for c, col in enumerate(self.columns) if c in different_columns],
             ))
 
     def set_comment(self, id_, new_comment):
@@ -400,14 +382,146 @@ class EMDBTable:
                 'UPDATE "{}" SET comment = ? WHERE id = ?'.format(self.name),
                 (new_comment, id_,)
             )
-        except dbsys.OperationalError as e:
+        except sqlite3.OperationalError as e:
             print('SQL error for experiment "{}":'.format(self.name), e)
             return False
         else:
             return True
 
+    def add_column(self, column_name, data):
+        """Add a new column to the table with the given name and data.
 
-# https://docs.python.org/3/library/cmd.html
+        The new column is always of datatype REAL and is added just
+        before the column "duration", i.e., at the end of the
+        user-defined columns.
+
+        Adding a new column is a bit tricky in SQLite, because this is
+        not supported natively.  Therefore, it is necessary to create a
+        new table with the additional column and move all the data there
+        from the original table.  For this, we rename, at first, the
+        existing table, then we create a new one with the original name,
+        we migrate all the data from the old to the new table and we
+        remove the old table.  Then, finally, we fill the new table with
+        the given data.  If anything went wrong during this process,
+        there should be two tables, one with the original name of the
+        table, and one with the prefix "tmp_", so it should be possible
+        for the user to recover the data by manually moving it from the
+        temporary to the new table.
+        """
+        old_column_name_string = ", ".join(
+            ['"{}"'.format(col[0]) for col in self.columns]
+        )
+        for i, column in enumerate(self.columns):
+            if column[0] == "duration":
+                i_new_column = i
+                break
+        else:
+            print(
+                'Cannot add a new column before "duration" because '
+                'no column "duration" exists in the table "{}".'.format(self.name)
+            )
+            return False
+        self.columns = (
+            self.columns[:i_new_column] + [(column_name, "REAL")] + self.columns[i_new_column:]
+        )
+        new_column_name_type_string = ", ".join([
+            '"{}" {}'.format(column_name, column_type)
+            for column_name, column_type in self.columns
+        ])
+        tmp_name = "tmp_" + self.name
+        try:
+            # Rename the current table
+            self.c.execute(
+                'ALTER TABLE "{}" RENAME TO "{}"'.format(self.name, tmp_name)
+            )
+            # Create a new table with its name and the new column
+            self.c.execute(
+                'CREATE TABLE "{}" ({})'.format(self.name, new_column_name_type_string)
+            )
+            # Copy the data from the old to the new table
+            self.c.execute(
+                'INSERT INTO "{}" ({}) SELECT {} FROM "{}"'.format(
+                    self.name, old_column_name_string, old_column_name_string, tmp_name
+                )
+            )
+            # Remove the old table
+            self.c.execute('DROP TABLE "{}"'.format(tmp_name))
+        except sqlite3.OperationalError as e:
+            print(
+                'SQL error for experiment "{}" when adding column "{}": {}'
+                .format(self.name, column_name, e)
+            )
+            return False
+        # Get the IDs of the entries in the table
+        try:
+            self.c.execute(f'SELECT id FROM "{self.name}"')
+        except sqlite3.OperationalError as e:
+            print(f'SQL error for experiment "{self.name}" when fetching IDs:', e)
+            return False
+        # Fill every entry
+        return_status = True
+        for entry, value in zip(self.c.fetchall(), data):
+            id_ = entry[0]
+            try:
+                # TODO: do this with ?-notation instead of string format
+                self.c.execute(
+                    f'UPDATE "{self.name}" SET {column_name} = {value} WHERE id = {id_}'
+                )
+            except sqlite3.OperationalError as e:
+                print(
+                    'SQL error for experiment "{}" when adding value {} to entry {}:'
+                    .format(self.name, repr(value), id_), e
+                )
+                return_status = False
+        return return_status
+
+    def remove_column(self, column_name):
+        """Remove the column with the given name from the table.
+
+        A similar caveat as for add_column applies.
+        """
+        for column in self.columns:
+            if column[0] == column_name:
+                self.columns.remove(column)
+                break
+        else:
+            print('Cannot find column "{}" in table "{}".'.format(column_name, self.name))
+            return False
+        new_column_name_string = ", ".join([
+            '"{}"'.format(column_name)
+            for column_name, column_type in self.columns
+        ])
+        new_column_name_type_string = ", ".join([
+            '"{}" {}'.format(column_name, column_type)
+            for column_name, column_type in self.columns
+        ])
+        tmp_name = "tmp_" + self.name
+        try:
+            # Rename the current table
+            self.c.execute(
+                'ALTER TABLE "{}" RENAME TO "{}"'.format(self.name, tmp_name)
+            )
+            # Create a new table with its name and without the column
+            self.c.execute(
+                'CREATE TABLE "{}" ({})'.format(self.name, new_column_name_type_string)
+            )
+            # Copy the data from the old to the new table
+            self.c.execute(
+                'INSERT INTO "{}" SELECT {} FROM "{}"'.format(
+                    self.name, new_column_name_string, tmp_name
+                )
+            )
+            # Remove the old table
+            self.c.execute('DROP TABLE "{}"'.format(tmp_name))
+        except sqlite3.OperationalError as e:
+            print(
+                'SQL error for experiment "{}" when removing column "{}": {}'
+                .format(self.name, column_name, e)
+            )
+            return False
+        return True
+
+
 class EMShell(cmd.Cmd):
     """Experiment Management (System) Shell"""
 
@@ -422,14 +536,19 @@ class EMShell(cmd.Cmd):
     ruler = "-"
 
     def __init__(self, experiments_dir: str):
+        """Establish a connection to the database in the given directory.
+
+        This initialises also the command history.
+        """
         self.initialized = False
         super().__init__()
         print("-"*50)
-        print("Fluid2d Experiment Management System (EMS)")
+        print("Fluid2D Experiment Management System (EMS)")
         self.exp_dir = experiments_dir
         self.con = EMDBConnection(os.path.join(self.exp_dir, "experiments.db"))
         self.intro += "\n" + self.con.get_table_overview() + "\n"
         self.selected_table = ""
+
         # Settings for saving the command history
         self.command_history_file = os.path.join(self.exp_dir, ".emshell_history")
         readline.set_history_length(1000)
@@ -439,6 +558,7 @@ class EMShell(cmd.Cmd):
         self.initialized = True
 
     def __del__(self):
+        """Save the command history (not the database)."""
         if self.initialized:
             print("Saving command history.")
             readline.write_history_file(self.command_history_file)
@@ -501,10 +621,12 @@ class EMShell(cmd.Cmd):
         if not hidden_information.issuperset({'size_diag', 'size_flux', 'size_his',
                                               'size_mp4', 'size_total'}):
             parameters += ['size']
-        # Add columns of selected table to the list of auto-completions
-        for table in self.con.tables:
-            if self.selected_table == "" or self.selected_table == table.name:
-                parameters += [n for n,t in table.columns]
+        # Add columns of the selected table (or of all tables if none is
+        # selected) to the list of auto-completions
+        if self.selected_table:
+            parameters += self.con.do(EMDBTable.get_column_names, self.selected_table)
+        else:
+            parameters += self.con.get_all_column_names()
         return [p for p in parameters if p.startswith(text) and p not in hidden_information]
 
     def help_disable(self):
@@ -539,13 +661,16 @@ class EMShell(cmd.Cmd):
         if len(params) == 0:
             # No table name given
             if self.selected_table:
-                self.con.show_table(self.selected_table)
+                print("-"*50)
+                self.con.do(print, self.selected_table)
             else:
-                self.con.show_all_tables()
+                for table in self.con.tables:
+                    print("-"*50)
+                    print(table)
         else:
             for table_name in sorted(params):
-                # Try to open the specified table.
-                self.con.show_table(table_name)
+                print("-"*50)
+                self.con.do(print, table_name)
         print("-"*50)
 
     def complete_show(self, text, line, begidx, endidx):
@@ -565,6 +690,10 @@ class EMShell(cmd.Cmd):
     See also: filter, sort.""")
 
     def do_filter(self, params):
+        # Check the run condition
+        if not self.selected_table:
+            print('No experiment selected.  Select an experiment to filter it.')
+            return
         global display_all
         if params.endswith(" -v"):
             params = params[:-3]
@@ -573,8 +702,10 @@ class EMShell(cmd.Cmd):
             display_all = False
         if not params:
             print('No condition to filter given.  Type "help filter" for further information.')
-        else:
-            self.con.show_filtered_table(self.selected_table, params)
+            return
+        print("-"*50)
+        self.con.do(EMDBTable.print_selection, self.selected_table, params)
+        print("-"*50)
 
     def complete_filter(self, text, line, begidx, endidx):
         return self.column_name_completion(self.selected_table, text)
@@ -607,6 +738,10 @@ class EMShell(cmd.Cmd):
     See also: sort, show.""")
 
     def do_sort(self, params):
+        # Check the run condition
+        if not self.selected_table:
+            print("No experiment selected.  Select an experiment to sort it.")
+            return
         global display_all
         if params.endswith(" -v"):
             params = params[:-3]
@@ -616,7 +751,9 @@ class EMShell(cmd.Cmd):
         if not params:
             print('No parameter to sort given.  Type "help sort" for further information.')
         else:
-            self.con.show_sorted_table(self.selected_table, params)
+            print("-"*50)
+            self.con.do(EMDBTable.print_sorted, self.selected_table, params)
+            print("-"*50)
 
     def complete_sort(self, text, line, begidx, endidx):
         return self.column_name_completion(self.selected_table, text)
@@ -657,13 +794,15 @@ class EMShell(cmd.Cmd):
             if len(ids) < 2:
                 print("Please specify at least 2 different IDs.")
                 return
-        elif self.con.get_table_length(self.selected_table) < 2:
+        elif self.con.do(len, self.selected_table) < 2:
             print("Selected experiment contains less than 2 entries.")
             return
         else:
             # No IDs means no filtering, i.e., all entries are compared
             ids = []
-        self.con.show_comparison(self.selected_table, ids, highlight)
+        print("-"*50)
+        self.con.do(EMDBTable.print_comparison, self.selected_table, ids, highlight)
+        print("-"*50)
 
     def help_compare(self):
         print("""> compare [IDs] [-h] [-v]
@@ -825,6 +964,11 @@ class EMShell(cmd.Cmd):
     Its name must not contain any whitespace.""")
 
     def do_plot(self, params):
+        # Check that the required module is loaded
+        if not matplotlib:
+            print("This feature requires matplotlib, which has not been imported successfully.")
+            print("The error message can be found at the beginning of the programme output.")
+            return
         # Check the run condition
         if not self.selected_table:
             print('No experiment selected.  Select an experiment to plot its data.')
@@ -885,6 +1029,11 @@ class EMShell(cmd.Cmd):
        selected class of experiments with the size of their history-file.""")
 
     def do_scatter(self, params):
+        # Check that the required module is loaded
+        if not matplotlib:
+            print("This feature requires matplotlib, which has not been imported successfully.")
+            print("The error message can be found at the beginning of the programme output.")
+            return
         # Check the run condition
         if not self.selected_table:
             print('No experiment selected.  Select an experiment to plot its data.')
@@ -949,6 +1098,11 @@ class EMShell(cmd.Cmd):
        of the current class without diffusion.""")
 
     def do_pcolor(self, params):
+        # Check that the required module is loaded
+        if not matplotlib:
+            print("This feature requires matplotlib, which has not been imported successfully.")
+            print("The error message can be found at the beginning of the programme output.")
+            return
         # Check the run condition
         if not self.selected_table:
             print('No experiment selected.  Select an experiment to plot its data.')
@@ -962,20 +1116,27 @@ class EMShell(cmd.Cmd):
         datas = self.get_multiple_data(self.selected_table, variables, parameters["condition"])
         if not datas:
             return
+        x_data = datas[0]
+        y_data = datas[1]
+        z_data = datas[2]
         # Arrange the data in a grid
-        xvalues = sorted(set(datas[0]))
-        yvalues = sorted(set(datas[1]))
-        print(f'There are {len(xvalues)} unique x-values and {len(yvalues)} unique y-values.')
-        data_grid = np.full((len(yvalues), len(xvalues)), np.nan)
-        for i, zval in enumerate(datas[2]):
-            data_grid[yvalues.index(datas[1][i]), xvalues.index(datas[0][i])] = zval
-        # If no shading is applied, extend the axes to have each rectangle
-        # centred at the corresponding (x,y)-value
+        xvalues = sorted(set(x_data))
+        yvalues = sorted(set(y_data))
+        nx = len(xvalues)
+        ny = len(yvalues)
+        print(f"There are {nx} unique x-values and {ny} unique y-values.")
+        data_grid = [[float("nan")] * nx for i in range(ny)]
+        for i, zval in enumerate(z_data):
+            data_grid[yvalues.index(y_data[i])][xvalues.index(x_data[i])] = zval
         if parameters["shading"] == 'flat':
-            xdiff2 = np.diff(xvalues)/2
-            xaxis = [xvalues[0] - xdiff2[0], *(xvalues[:-1] + xdiff2), xvalues[-1] + xdiff2[-1]]
-            ydiff2 = np.diff(yvalues)/2
-            yaxis = [yvalues[0] - ydiff2[0], *(yvalues[:-1] + ydiff2), yvalues[-1] + ydiff2[-1]]
+            # If no shading is applied, extend the axes to have each rectangle
+            # centred at the corresponding (x,y)-value
+            xaxis = [xvalues[0] - (xvalues[1] - xvalues[0]) / 2]
+            xaxis += [xvalues[i] + (xvalues[i+1] - xvalues[i]) / 2 for i in range(len(xvalues) - 1)]
+            xaxis += [xvalues[-1] + (xvalues[-1] - xvalues[-2]) / 2]
+            yaxis = [yvalues[0] - (yvalues[1] - yvalues[0]) / 2]
+            yaxis += [yvalues[i] + (yvalues[i+1] - yvalues[i]) / 2 for i in range(len(yvalues) - 1)]
+            yaxis += [yvalues[-1] + (yvalues[-1] - yvalues[-2]) / 2]
         else:
             xaxis = xvalues
             yaxis = yvalues
@@ -990,10 +1151,15 @@ class EMShell(cmd.Cmd):
         plt.title(plot_title)
         plt.xlabel(variables[0])
         plt.ylabel(variables[1])
+        cmap = parameters["cmap"]
+        if cmap == "iridescent":
+            cmap = iridescent
+        if cmap == "iridescent_r":
+            cmap = iridescent_r
         try:
             plt.pcolormesh(
                 xaxis, yaxis, data_grid,
-                cmap=parameters["cmap"], shading=parameters["shading"],
+                cmap=cmap, shading=parameters["shading"],
                 vmin=parameters["zmin"], vmax=parameters["zmax"],
             )
         except Exception as e:
@@ -1032,6 +1198,11 @@ class EMShell(cmd.Cmd):
        of the current class without diffusion.""")
 
     def do_save_figure(self, params):
+        # Check that the required module is loaded
+        if not matplotlib:
+            print("This feature requires matplotlib, which has not been imported successfully.")
+            print("The error message can be found at the beginning of the programme output.")
+            return
         if not params:
             params = "png"
         if params in ["png", "pdf", "svg"]:
@@ -1055,6 +1226,11 @@ class EMShell(cmd.Cmd):
 
     def do_new_figure(self, params):
         """Open a window to draw the next plot in a new figure."""
+        # Check that the required module is loaded
+        if not matplotlib:
+            print("This feature requires matplotlib, which has not been imported successfully.")
+            print("The error message can be found at the beginning of the programme output.")
+            return
         plt.figure()
 
     ### Functionality to MODIFY the entries
@@ -1067,7 +1243,9 @@ class EMShell(cmd.Cmd):
         # Print the current entry fully
         global display_all
         display_all = True
-        self.con.show_filtered_table(table_name, f"id = {id_}")
+        print("-"*50)
+        self.con.do(EMDBTable.print_selection, table_name, f"id = {id_}")
+        print("-"*50)
         # Ask for user input
         print("Write a new comment for this entry (Ctrl+D to finish, Ctrl+C to cancel):")
         comment_lines = []
@@ -1082,16 +1260,107 @@ class EMShell(cmd.Cmd):
             comment_lines.append(line)
         comment = "\n".join(comment_lines).strip()
         # Update the comment
-        if self.con.set_comment(table_name, id_, comment):
+        if self.con.do(EMDBTable.set_comment, table_name, id_, comment):
             self.con.save_database()
             print("New comment was saved.")
-        else:
-            print("An error occured.")
 
     def help_new_comment(self):
         print("""> new_comment [experiment] <ID>
     Ask the user to enter a new comment for an experiment.""")
         self.print_param_parser_help()
+
+    def do_add_column(self, params):
+        # TODO: this adds currently only REAL data (float) before the "duration" column
+        # Check the run condition
+        if not self.selected_table:
+            print('No experiment selected.  Select an experiment to add a column.')
+            return
+        params = params.split()
+        if len(params) != 2:
+            print(
+                "Exactly two arguments are needed: name of the new column "
+                "and name of the tool to fill it."
+            )
+            return
+        column_name, tool_name = params
+        if column_name in self.con.do(EMDBTable.get_column_names, self.selected_table):
+            print(
+                "A column with the name {} exists already in {}."
+                .format(column_name, self.selected_table)
+            )
+            return
+        data = self.get_data(self.selected_table, tool_name, condition="")
+        if not data:
+            print("Getting data failed.")
+            return
+        if self.con.do(EMDBTable.add_column, self.selected_table, column_name, data):
+            self.con.save_database()
+            print("Done.")
+        else:
+            print("An error occured.")
+
+    def complete_add_column(self, text, line, begidx, endidx):
+        return self.plot_attribute_completion(text, [])
+
+    def help_add_column(self):
+        print("""> add_column <column name> <tool name>
+    Add a new column with the given name to the selected table.  The new
+    column will be added before the "duration" column, that means, at
+    the end of the user-defined columns.  It will be of type REAL
+    (float) and will be filled with data computed by the specified tool.
+    For more information about tools, see "calculate".  Instead of a
+    tool, also the name of an already existing column can be given to
+    copy the data from there.
+
+    Warning: If you want to run more experiments of the selected class
+    after adding a new column to the table, you must also add a
+    corresponding parameter in the experiment file with the same
+    datatype and at the same position."""
+        )
+
+    def do_remove_column(self, params):
+        # Check the run condition
+        if not self.selected_table:
+            print('No experiment selected.  Select an experiment to remove a column.')
+            return
+        column_name = params
+        if column_name not in self.con.do(EMDBTable.get_column_names, self.selected_table):
+            print(
+                "No column with the name {} exists in {}."
+                .format(column_name, self.selected_table)
+            )
+            return
+        print(
+            'Do you really want to permanently delete the column {!r} from {!r}?'
+            .format(column_name, self.selected_table)
+        )
+        print('This cannot be undone.')
+        answer = input('Continue [yes/no] ? ')
+        if answer == 'yes':
+            if self.con.do(EMDBTable.remove_column, self.selected_table, column_name):
+                self.con.save_database()
+                print("Done.")
+            else:
+                print("An error occured.")
+        elif answer == "no":
+            # Do nothing.
+            pass
+        else:
+            print('Answer was not "yes".  No data removed.')
+
+    def complete_remove_column(self, text, line, begidx, endidx):
+        return self.column_name_completion(self.selected_table, text)
+
+    def help_remove_column(self):
+        print("""> remove_column <column name>
+    Remove the specified column from the selected table.
+
+    The user is asked for confirmation before the command is executed.
+
+    Warning: If you want to run more experiments of the selected class
+    after removing a column from the table, you must also remove the
+    corresponding parameter in the experiment file."""
+        )
 
     ### Functionality to CLEAN up
     def do_remove(self, params):
@@ -1112,11 +1381,13 @@ class EMShell(cmd.Cmd):
         global display_all
         display_all = True
         if len(ids) == 1:
-            statement = "id = {}".format(*ids)
+            statement = "id = {}".format(ids[0])
         else:
             statement = "id IN {}".format(tuple(ids))
         print('WARNING: the following entries will be DELETED:')
-        self.con.show_filtered_table(self.selected_table, statement)
+        print("-"*50)
+        self.con.do(EMDBTable.print_selection, self.selected_table, statement)
+        print("-"*50)
 
         # Print full information of related folders
         folders = []
@@ -1135,13 +1406,13 @@ class EMShell(cmd.Cmd):
                     print("   -", f)
 
         # Final check
-        print('Do you really want to permanently delete these files, folders and entries?')
+        print('Do you really want to permanently delete these files, folders, and entries?')
         print('This cannot be undone.')
         answer = input('Continue [yes/no] ? ')
         if answer == 'yes':
             # Remove entries
             for id_ in ids:
-                self.con.delete_entry(self.selected_table, id_)
+                self.con.do(EMDBTable.delete_entry, self.selected_table, id_)
                 print('Deleted entry', id_, 'from experiment "{}".'.format(self.selected_table))
             self.con.save_database()
             # Remove files
@@ -1180,7 +1451,7 @@ class EMShell(cmd.Cmd):
             print('This command takes no attributes.  Cancelling.')
             return
 
-        if self.con.get_table_length(self.selected_table):
+        if self.con.do(len, self.selected_table) > 0:
             print('Selected experiment class contains experiments.  Remove these '
                   'experiments first before removing the class.  Cancelling.')
             return
@@ -1238,7 +1509,7 @@ class EMShell(cmd.Cmd):
         if params == "":
             self.prompt = "(EMS) "
             self.selected_table = params
-        elif self.check_table_exists(params):
+        elif self.con.is_valid_table(params):
             self.prompt = "({}) ".format(params)
             self.selected_table = params
         else:
@@ -1260,6 +1531,10 @@ class EMShell(cmd.Cmd):
         return True
 
     def do_EOF(self, params):
+        """This is called when Ctrl+D is pressed.
+        If an experiment is selected, it will be deselected.
+        If no experiment is selected, the programme will exit.
+        """
         if self.selected_table:
             print("select")
             self.prompt = "(EMS) "
@@ -1280,21 +1555,13 @@ class EMShell(cmd.Cmd):
         if not self.selected_table:
             print("\nError: select an experiment first!")
             return []
-        parameters += self.con.get_column_names(self.selected_table)
+        parameters += self.con.do(EMDBTable.get_column_names, self.selected_table)
         parameters.extend(extra_tools.keys())
         return [p for p in parameters if p.startswith(text)]
 
     def column_name_completion(self, table_name, text):
-        completions = []
-        for table in self.con.tables:
-            if table.name == table_name or table_name == "":
-                for column_name, column_type in table.columns:
-                    if column_name.startswith(text):
-                        completions.append(column_name)
-        return completions
-
-    def check_table_exists(self, name):
-        return name in [table.name for table in self.con.tables]
+        columns = self.con.do(EMDBTable.get_column_names, table_name)
+        return [c for c in columns if c.startswith(text)]
 
     def parse_params_to_experiment(self, params: str) -> [str, int]:
         """Parse and check input of the form "[experiment] <ID>".
@@ -1321,7 +1588,7 @@ class EMShell(cmd.Cmd):
         # Parse and check the table name
         table_name = " ".join(params).strip()
         if table_name:
-            if not self.con.table_exists(table_name):
+            if not self.con.is_valid_table(table_name):
                 print(f'No experiment class with the name "{table_name}" exists.')
                 return None
         else:
@@ -1331,11 +1598,10 @@ class EMShell(cmd.Cmd):
             table_name = self.selected_table
         # Check the ID
         if id_ == "last":
-            id_ = self.con.get_latest_entry(table_name)
+            id_ = self.con.do(EMDBTable.get_latest_entry, table_name)
             if id_ is None:
-                print(f'No entry exists for the experiment class "{table_name}".')
                 return None
-        elif not self.con.entry_exists(table_name, id_):
+        elif not self.con.do(EMDBTable.entry_exists, table_name, id_):
             print(f'No entry with ID {id_} exists for the experiment class "{table_name}".')
             return None
         return table_name, id_
@@ -1405,11 +1671,10 @@ class EMShell(cmd.Cmd):
         ids = []
         for id_ in param_list:
             if id_ == "last":
-                id_ = self.con.get_latest_entry(self.selected_table)
+                id_ = self.con.do(EMDBTable.get_latest_entry, self.selected_table)
                 if id_ is None:
-                    print(f'No entry exists for the experiment class "{self.selected_table}".')
                     return
-                elif id_ in ids:
+                if id_ in ids:
                     continue
             else:
                 try:
@@ -1419,7 +1684,7 @@ class EMShell(cmd.Cmd):
                     return
                 if id_ in ids:
                     continue
-                if not self.con.entry_exists(self.selected_table, id_):
+                if not self.con.do(EMDBTable.entry_exists, self.selected_table, id_):
                     print('No entry with ID', id_, 'exists for the selected experiment.')
                     return
             ids.append(id_)
@@ -1458,11 +1723,11 @@ class EMShell(cmd.Cmd):
         return datas
 
     def get_data(self, table_name, parameter, condition):
-        if self.con.is_valid_column(parameter, table_name):
-            return self.con.get_data(table_name, parameter, condition)
+        if parameter in self.con.do(EMDBTable.get_column_names, table_name):
+            return self.con.do(EMDBTable.get_data, table_name, parameter, condition)
         elif parameter in extra_tools:
             data = []
-            ids = self.con.get_data(table_name, "id", condition)
+            ids = self.con.do(EMDBTable.get_data, table_name, "id", condition)
             print(f'Calculating data with tool "{parameter}" for {len(ids)} experiments.')
             tstart = time.time()
             for id_ in ids:
@@ -1514,10 +1779,12 @@ class EMShell(cmd.Cmd):
             )
         elif plot_type == "3d":
             print("""
-    To specify the colour map of the plot, use "-cmap=<name>", where <name> is
-    the name of a colour map for matplotlib like "-cmap=bwr" to plot in blue-
-    white-red or "-cmap=jet" for a colourful rainbow.  For further examples,
-    consider the website https://matplotlib.org/users/colormaps.html .
+    To specify the colour map of the plot, use "-cmap=<name>", where
+    <name> is the name of a colour map for matplotlib, like "-cmap=bwr"
+    to plot in blue-white-red or "-cmap=iridescent" to use Paul Tol's
+    beautiful colour scheme that also works in colour-blind vision.
+    For further inspiration, consider the following website:
+    https://matplotlib.org/users/colormaps.html
 
     To specify the range in x-, y- or z-direction, use the following attributes:
         -xmin=<v>, -xmax=<v>, -ymin=<v>, -ymax=<v>, -zmin=<v>, -zmax=<v>
@@ -1774,7 +2041,8 @@ else:
         )
 
 # Activate interactive plotting
-plt.ion()
+if matplotlib:
+    plt.ion()
 
 # Compile regular expression to match parameters
 # This matches -xmin=, -xmax=, -ymin=, -ymax=, -zmin=, -zmax=
