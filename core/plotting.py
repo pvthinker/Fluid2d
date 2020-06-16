@@ -32,6 +32,14 @@ class Plotting(object):
                 # Define a dummy cax to prevent create_fig from failing
                 self.cax = [None, None]
 
+        if param.npx * param.npy > 1 and self.generate_mp4:
+            print(
+                'Warning: It is not possible to generate an mp4-file when '
+                'fluid2d runs on multiple cores.\n'
+                'The parameter generate_mp4 is automatically changed to False.'
+            )
+            self.generate_mp4 = False
+
         nh = self.nh
         nx = param.nx
         ny = param.ny
