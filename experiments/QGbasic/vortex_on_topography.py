@@ -5,7 +5,7 @@ import numpy as np
 
 param = Param('default.xml')
 param.modelname = 'quasigeostrophic'
-param.expname = 'topo_test'
+param.expname = 'vortex_topo_0'
 
 # domain and resolution
 ratio = 2
@@ -15,42 +15,41 @@ param.npx = 1
 param.npy = 1
 param.Lx = 2.
 param.Ly = param.Lx/ratio
-param.geometry = 'xchannel'
+param.geometry = 'perio'
 
 # time
-param.tend = 500.
-param.cfl = 1.2
-param.adaptable_dt = False
-param.dt = 0.3
+param.tend = 50.
+param.cfl = 0.8
+param.adaptable_dt = True
+param.dt = 1.
 param.dtmax = 100.
 
 # discretization
 param.order = 5
-# param.flux_splitting_method = 'minmax'
+param.flux_splitting_method = 'minmax'
 
 # output
 param.ageostrophic = True
 param.var_to_save = ['pv', 'psi', 'u', 'v', 'pvanom', 'vorticity',
                      'btorque', 'ua', 'va']
-param.list_diag = 'all'
-param.freq_his = 10
-param.freq_diag = 1.
-param.exacthistime = False
+param.list_diag = ['ke', 'pv', 'pv2']
+param.freq_his = 1
+param.freq_diag = .5
 
 # plot
 param.plot_var = 'pv'
 param.freq_plot = 10
-a = 0.6
+a = 4.
 param.cax = [-a, a]
 param.plot_interactive = True
 param.plot_psi = True
 param.plot_pvback = True
-param.colorscheme = 'imposed'
+param.colorscheme = 'symmetric'
 param.imshow_interpolation = 'bilinear'
 param.generate_mp4 = True
 
 # physics
-param.beta = 0.
+param.beta = 1.
 param.Rd = 0.1  # 2*grid.dx
 param.bottom_torque = True
 param.forcing = False
@@ -103,29 +102,26 @@ def vortex(param, grid,
 # 2/ set an initial tracer field
 vtype = 'cosine'
 # vortex width
-sigma = 0.04*param.Lx
-amplitude = .5
+sigma = 0.06*param.Lx
+amplitude = -1.
 
-vtype = 'step'
-vortex_config = 'dipole2'
-topo_config = 'margin'
+vortex_config = 'dipole'
+topo_config = 'seamount'
 
-remove_pvtopo = False
+remove_pvtopo = True
 
 """Set the topography"""
 
 if topo_config == 'seamount':
     # define a seamount
     vtype = 'gaussian'
-    vtype = 'step'
     sigma = 0.08*param.Lx
-    htopo = 1*amplitude*vortex(param, grid, 0.2, 0.5, sigma, vtype)
-    sigma = 0.02*param.Lx
-    #htopo += vortex(param, grid, 0.22, 0.46, sigma, vtype)
-    vtype = 'step'
+    htopo = -vortex(param, grid, 0.2, 0.5, sigma, vtype)
+    sigma = 0.03*param.Lx
+    htopo += 3*vortex(param, grid, 0.22, 0.46, sigma, vtype)
 
 elif topo_config == 'margin':
-    htopo = amplitude*(1+np.tanh((yr/param.Ly-0.85)/.1))
+    htopo = 0.3*(1+np.tanh((yr/param.Ly-0.85)/.1))
 
 elif topo_config == 'canyon':
     steep = 0.02
@@ -144,16 +140,15 @@ if vortex_config == 'single':
     vor[:] = amplitude*vortex(param, grid, x0, y0, sigma, vtype, ratio=1)
 
 elif vortex_config == 'dipole':
-    d = 5*sigma/param.Lx
+    d = 4*sigma/param.Lx
     x0, y0 = 0.4, 0.5
-    vor[:] += amplitude*vortex(param, grid, x0, y0-d/2, sigma, vtype)
-    vor[:] -= amplitude*vortex(param, grid, x0, y0+d/2, sigma, vtype)
+    vor[:] += -amplitude*vortex(param, grid, x0, y0-d/2, sigma, vtype)
+    vor[:] += +amplitude*vortex(param, grid, x0, y0+d/2, sigma, vtype)
 
 elif vortex_config == 'dipole2':
-    d = 3*sigma/param.Lx
-    x0, y0 = 0.5, 0.6
-    vor[:] += amplitude*vortex(param, grid, x0-d/2, y0, sigma, vtype)
-    vor[:] -= amplitude*vortex(param, grid, x0+d/2, y0, sigma, vtype)
+    d = 4*sigma/param.Lx
+    vor[:] += -amplitude*vortex(param, grid, 0.5-d/2, 0.2, sigma, vtype)
+    vor[:] += +amplitude*vortex(param, grid, 0.5+d/2, 0.2, sigma, vtype)
 
 elif vortex_config == 'jet':
     sigma = 0.05
