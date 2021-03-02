@@ -78,16 +78,10 @@ class Restart(object):
         f2d.output.template = self.expdir +'/%s_%02i_his' % (
             self.expname, self.nextrestart)+'_%03i.nc'
         f2d.output.hisfile = f2d.output.template % (self.myrank)
-        f2d.output.hisfile_joined = self.expdir + '/%s_%02i_his.nc' % (
-            self.expname, self.nextrestart)
         if self.diag_fluxes:
             f2d.output.template = self.expdir +'/%s_%02i_flx' % (
                 self.expname, self.nextrestart)+'_%03i.nc'
             f2d.output.flxfile = f2d.output.template % (self.myrank)
-            f2d.output.flxfile_joined = self.expdir + '/%s_%02i_flx.nc' % (
-                self.expname, self.nextrestart)
-            
-            
 
         # split the integration in 'ninterrestart' intervals and
         # save a restart at the end of each

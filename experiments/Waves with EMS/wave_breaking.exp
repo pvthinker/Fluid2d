@@ -1,0 +1,55 @@
+# Fluid2d-experiment with EMS: wave breaking at the coast (experiment file)
+#
+# Refer to the documentation of `ems.parse_experiment_file` for a
+# detailed description of the experiment file format.
+#
+# Author: Markus Reinert, May/June 2019
+
+
+# Name of the experiment class.
+# If the name is changed, a new table is created in the database.
+Name: Breaking_Waves
+
+
+# ID of the experiment within its class.
+# Usually, an ID should NOT be specified, so that the EMS chooses automatically a unique ID.
+# It is only necessary to specify an ID explicitly if fluid2d runs on multiple cores, for
+# example with mpirun.  Furthermore, it is possible to overwrite existing entries in the
+# database by specifying their ID.
+# The ID is automatically increased by 1 for every new combination if multiple values are
+# given for one or several parameters.
+# Uncomment the following line to set an ID manually:
+#ID: 21
+
+
+# Descriptions are optional.
+# They can go over multiple lines and can also contain empty lines.
+# Empty lines at the beginning and at the end of the description are ignored.
+Description: Simulate waves on the interface of two fluids.
+Modify the parameters in this file and observe the creation, propagation and breaking of waves at a sloping coast.
+
+
+# Here are the parameters that we want to modify in this class of experiments.
+# Parameters which we intend to keep constant are in the Python file.
+# For every parameter, at least one value has to be specified.  Multiple values can be
+# specified to automatically run one experiment for every combination of the given values.
+Parameters:
+
+### Physics
+# activate or deactivate diffusion
+diffusion False
+# diffusion coefficient (if diffusion is True)
+Kdiff 1e-2
+
+### Coast
+slope 0.5
+height 1.05
+# beginning of the flat coast
+x_start 4.0
+
+### Initial Condition
+# perturbation can be of type "sin" or "gauss"
+perturbation gauss
+# height and width of the perturbation
+intensity  0.5
+sigma      0.4 0.8
