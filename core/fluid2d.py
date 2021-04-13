@@ -85,11 +85,17 @@ class Fluid2d(object):
             from quasigeostrophic import QG
             self.model = QG(param, grid)
 
+        if param.modelname == 'sqg':
+            from sqg import SQG
+            self.model = SQG(param, grid)
+
         if param.modelname == 'thermalwind':
             from thermalwind import Thermalwind
             self.model = Thermalwind(param, grid)
 
         if self.modelname == 'quasigeostrophic':
+            self.enstrophyname = 'pv2'
+        elif self.modelname == 'sqg':
             self.enstrophyname = 'pv2'
         else:
             self.enstrophyname = 'enstrophy'
