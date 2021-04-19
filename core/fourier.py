@@ -20,14 +20,25 @@ class Fourier(object):
         self.xx, self.yy = np.meshgrid(self.x, self.y)
         self.kxx, self.kyy = np.meshgrid(self.kx, self.ky)
         self.ktot = np.sqrt(self.kxx**2+self.kyy**2)
-
+        self.ktot[0,0] = 1. # <- to avoid division by zero
+        # shift in Fourier space to move
+        # psi from cell centers to cell corners
         shift = np.exp(1j*(self.kxx*dx*0.5+self.kyy*dy*0.5))
-        self.pv2psi = (1/self.ktot)*shift
+        self.pv2psi = -(1/self.ktot)*shift
+        self.pv2vor = self.ktot
         self.pv2psi[0,0] = 0.
+        self.ktot[0,0] = 0.
 
-    def invert(self, pv, psi):
+    def invert(self, pv, psi, vor):
         nh = self.nh
         hpv = np.fft.fft2(pv[nh:-nh,nh:-nh])
         hpsi = hpv*self.pv2psi
+        hvor = hpv*self.pv2vor
         psi[nh:-nh,nh:-nh] = np.real(np.fft.ifft2(hpsi))
-    
+        # Take the opportunity to compute the vorticity
+        #
+        # Because vorticity is a diagnostic variable
+        # it should be computed only for output purpose
+        # but in this version, I found it easier to
+        # compute the vorticity at all calls
+        vor[nh:-nh,nh:-nh] = np.real(np.fft.ifft2(hvor))

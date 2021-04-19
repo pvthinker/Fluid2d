@@ -393,29 +393,30 @@ class Operators(Param):
         self.fill_halo(y)
         dxdt[iV][:, :] += y
 
-    def fourier_invert_vorticity(self, x, flag='full', island=False):
+    def fourier_invert_vorticity(self, x, flag='full'):
         """ invert using Fourier transform """
         iu = self.varname_list.index('u')
         iv = self.varname_list.index('v')
         ip = self.varname_list.index('psi')
-        iw = self.varname_list.index(self.whosetspsi)
+        ivor = self.varname_list.index('vorticity')
+        ipv = self.varname_list.index('pv')
 
         u = x[iu]
         v = x[iv]
         psi = x[ip]
-        pv = x[iw]
+        pv = x[ipv]
+        vor = x[ivor]
 
-        self.fourier.invert(pv, psi)
+        self.fourier.invert(pv, psi, vor)
+        self.fill_halo(psi)
+        self.fill_halo(vor)
 
         self.first_time = False
 
         # compute (u,v) @ U,V points from psi @ cell corner
         fo.computeorthogradient(self.msk, psi, self.dx, self.dy, self.nh, u, v)
-        # self.fill_halo(u)
-        # self.fill_halo(v)
         x[iu] = u
         x[iv] = v
-        x[ip] = psi
 
     def invert_vorticity(self, x, flag='full', island=False):
         """ compute psi from vorticity (or 'whosetspsi' in general)

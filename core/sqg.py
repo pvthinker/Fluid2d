@@ -9,53 +9,53 @@ import sys
 
 
 class SQG(object):
-    """ Surface Quasi-geostrophic model
+    """ Surface Quasi-Geostrophic model
 
     The prognostic variable is 'pv'. It is the surface PV
+
+    The streamfunction is computed in the Fourier space
+
+    The geometry must be biperiodic
+
+    This model does not support multicores (because of the fft)
 
     """
 
     def __init__(self, param, grid):
-        self.list_param = ['forcing', 'diffusion', 'Kdiff', 'noslip',
-                           'timestepping', 'beta', 'Rd', 'ageostrophic',
-                           'bottom_torque',
-                           'forcing_module']
+        self.list_param = ['forcing', 'diffusion', 'Kdiff',
+                           'timestepping', 'ageostrophic',
+                           'forcing_module', 'geometry']
         param.copy(self, self.list_param)
 
         # for diagnostics
-        self.list_param = ['yr', 'nh', 'msk', 'area', 'mpitools',  'isisland']
+        self.list_param = ['yr', 'nh', 'msk', 'area', 'mpitools']
         grid.copy(self, self.list_param)
+        assert grid.geometry == "perio", "SQG imposes a biperiodic domain"
+
+        assert param.ageostrophic == False, "Ageostrophic velocity not yet tested"
 
         # for variables
-        param.varname_list = ['pv', 'psi', 'u', 'v', 'pvanom', 'vorticity']
-
-        if param.bottom_torque:
-            param.varname_list += ['btorque']
+        param.varname_list = ['pv', 'psi', 'u', 'v', 'vorticity']
 
         if param.ageostrophic:
+            # TODO: not yet tested for SQG
             param.varname_list += ['ua', 'va']
 
         param.sizevar = [grid.nyl, grid.nxl]
         self.var = Var(param)
         self.source = np.zeros(param.sizevar)
 
-        self.ipva = self.var.varname_list.index('pvanom')
         self.ipv = self.var.varname_list.index('pv')
         self.ivor = self.var.varname_list.index('vorticity')
         self.ipsi = self.var.varname_list.index('psi')
 
-        # background pv
-        self.pvback = self.beta*(grid.yr-grid.Ly*.5)*grid.msk
-
         # for operators
         param.tracer_list = ['pv']
-        if param.bottom_torque:
-            param.tracer_list += ['btorque']
 
         if param.ageostrophic:
             param.tracer_list += ['ua', 'va']
 
-        param.whosetspsi = ('pvanom')
+        param.whosetspsi = ('pv')
         param.sqgoperator = True
         self.ope = Operators(param, grid)
 
@@ -67,7 +67,8 @@ class SQG(object):
 
         if self.forcing:
             if self.forcing_module == 'embedded':
-                print('Warning: check that you have indeed added the forcing to the model')
+                print(
+                    'Warning: check that you have indeed added the forcing to the model')
                 print('Right below the line    : model = f2d.model')
                 print('you should have the line: model.forc = Forcing(param, grid)')
 
@@ -79,7 +80,8 @@ class SQG(object):
                 except ImportError:
                     print('module %s for forcing cannot be found'
                           % self.forcing_module)
-                    print('make sure file **%s.py** exists' % self.forcing_module)
+                    print('make sure file **%s.py** exists' %
+                          self.forcing_module)
                     sys.exit(0)
 
                 self.forc = f.Forcing(param, grid)
@@ -90,10 +92,6 @@ class SQG(object):
 
     def step(self, t, dt):
         """Integrate the model over one time step dt"""
-
-        if self.bottom_torque:
-            ibt = self.var.varname_list.index('btorque')
-            self.var.state[ibt][:, :] = self.pvback
 
         if self.ageostrophic:
             iu = self.var.varname_list.index('u')
@@ -108,24 +106,7 @@ class SQG(object):
         # 1/ integrate advection
         self.tscheme.forward(self.var.state, t, dt)
 
-        # 2/ integrate source
-        if self.noslip:
-            self.add_noslip(self.var.state)
-
         self.set_psi_from_pv()
-        
-        # 3/ diagnostic fields
-        self.var.state[self.ipva] = self.var.state[self.ipv] - self.pvback
-        self.var.state[self.ivor] = (self.var.state[self.ipva]
-                                     - (self.Rd**-2)*self.var.state[self.ipsi])
-
-        if self.bottom_torque:
-            """ diagnose the bottom torque btorque = -J(psi, htopo)
-
-            in practice it is obtained as (htopo^{n+1}-htopo^n)/dt by
-            using the 'btorque' entry in var.state and transport it"""
-            self.var.state[ibt][:, :] = (self.var.state[ibt][:, :]
-                                         - self.pvback)/dt
 
         if self.ageostrophic:
             """ diagnose the ageostrophic velocity (factor 1/f missing)
@@ -162,17 +143,7 @@ class SQG(object):
                 self.ope.rhs_diffusion(x, t, dxdt)
 
         else:
-            dxdt[self.ipva] = dxdt[self.ipv]
-            self.ope.fourier_invert_vorticity(dxdt, flag='fast', island=self.isisland)
-
-    def add_noslip(self, x):
-        """Add the no-slip term """
-
-        self.ope.rhs_noslip(x, self.source)
-        self.ope.fourier_invert_vorticity(x, flag='fast', island=self.isisland)
-
-    def add_backgroundpv(self):
-        self.var.state[self.ipv] += self.pvback
+            self.ope.fourier_invert_vorticity(dxdt, flag='fast')
 
     def set_psi_from_pv(self):
         """Solve the elliptic equation for the streamfunction
@@ -180,23 +151,32 @@ class SQG(object):
         The unknown of the Helmholtz equation is the PV anomaly,
         not the full PV"""
 
-        state = self.var.state
-        state[self.ipva] = state[self.ipv] - self.pvback
-        self.ope.fourier_invert_vorticity(self.var.state, flag='full', island=self.isisland)
+        self.ope.fourier_invert_vorticity(self.var.state, flag='full')
 
     def diagnostics(self, var, t):
-        """ Integral diagnostics for the QG model
+        """Integral diagnostics for the SQG model
 
-        should provide at least 'maxspeed' (for cfl determination) """
+        should provide at least 'maxspeed' (for cfl determination)
+
+        WARNING: the diag for KE and APE are wrong. A SQG flow is 3D
+        the integration should be carried over in the Fourier space
+
+        The total PV should be conserved (in the absence of external
+        forcing) and the enstrophy should be conserved as long as the
+        flow is not developping filaments (grid-scale enstrophy). The
+        numerical dissipation wipes out Filaments which yields
+        enstrophy dissipation.
+
+        """
 
         u = var.get('u')
         v = var.get('v')
         trac = var.get('pv')
         psi = var.get('psi')
 
-        fo.cornertocell(psi, self.ope.work)
-        psim, psi2 = fd.computesumandnorm(self.msk, self.ope.work, self.nh)
-        ape = 0.5 * psi2 / self.Rd**2
+        #fo.cornertocell(psi, self.ope.work)
+        #psim, psi2 = fd.computesumandnorm(self.msk, self.ope.work, self.nh)
+        #ape = 0.5 * psi2 / self.Rd**2
 
         ke, maxu = fd.computekemaxu(self.msk, u, v, self.nh)
 
@@ -205,12 +185,11 @@ class SQG(object):
         cst = self.mpitools.local_to_global([(maxu, 'max'),
                                              (ke, 'sum'),
                                              (z, 'sum'),
-                                             (z2, 'sum'),
-                                             (ape, 'sum')])
+                                             (z2, 'sum')])
 
         self.diags['maxspeed'] = cst[0]
         self.diags['ke'] = cst[1] / self.area
         self.diags['pv'] = cst[2] / self.area
         self.diags['pv2'] = 0.5*cst[3] / self.area
-        self.diags['ape'] = cst[4] / self.area
-        self.diags['energy'] = (cst[1]+cst[4]) / self.area
+        #self.diags['ape'] = cst[4] / self.area
+        #self.diags['energy'] = (cst[1]+cst[4]) / self.area
