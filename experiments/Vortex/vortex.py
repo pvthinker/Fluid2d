@@ -1,3 +1,9 @@
+"""
+Vortex dynamics
+
+Several initial states are provided: select one with 'vortex_config'
+
+"""
 from param import Param
 from grid import Grid
 from fluid2d import Fluid2d
@@ -17,7 +23,7 @@ import ana_profiles as ap
 
 param = Param('default.xml')
 param.modelname = 'euler'
-param.expname = 'vortex_08'
+param.expname = 'vortex_00'
 
 # domain and resolution
 param.nx = 64*2
@@ -38,7 +44,6 @@ param.dtmax = 100
 param.order = 3
 param.timestepping = 'RK3_SSP'
 param.exacthistime = True
-param.diag_fluxes = True
 
 # output
 param.var_to_save = ['vorticity', 'psi', 'tracer']
@@ -54,7 +59,7 @@ param.plot_psi = True
 param.plot_var = 'vorticity'
 param.cax = np.array([-2, 2.])*5
 param.colorscheme = 'imposed'
-param.generate_mp4 = True
+param.generate_mp4 = False
 
 # physics
 param.noslip = False

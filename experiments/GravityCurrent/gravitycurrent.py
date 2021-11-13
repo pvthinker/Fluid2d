@@ -1,3 +1,6 @@
+"""
+Gravity current along a topographic slope
+"""
 from param import Param
 from grid import Grid
 from fluid2d import Fluid2d

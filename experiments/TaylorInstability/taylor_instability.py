@@ -15,7 +15,7 @@ param.npx = 1
 param.npy = 1
 param.Lx = 1.
 param.Ly = param.Lx
-param.geometry = 'xperio'
+param.geometry = 'xchannel'
 
 # time
 param.tend = 10.
