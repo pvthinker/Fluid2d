@@ -97,8 +97,6 @@ class Plotting(object):
 
         self.ax1 = ax1
 
-        plt.ion()
-
         self.im = ax1.imshow(self.z2d*self.msk,
                              vmin=self.cax[0], vmax=self.cax[1],
                              cmap=self.cmap_obj,
@@ -210,6 +208,7 @@ class Plotting(object):
         # during the animation
         if _platform in ["linux", "linux2"]:
             self.fig.canvas.draw()
+            plt.pause(1e-4)
         else:
             plt.pause(1e-4)
 
