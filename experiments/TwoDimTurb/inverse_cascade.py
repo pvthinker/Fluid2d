@@ -83,7 +83,7 @@ param.forcing = False
 param.decay = False  # set it to False if forcing == True
 param.noslip = False
 param.diffusion = False
-param.diag_fluxes = True
+param.diag_fluxes = False
 
 # add a passive tracer
 param.additional_tracer = ['tracer']
