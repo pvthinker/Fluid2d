@@ -4,7 +4,7 @@ PYTHON = python
 F2PY   = f2py
 
 
-%.so : %.f90 ; $(F2PY) -m $* -c $< --opt='-O3 -fPIC'
+%.so : %.f90 ; $(F2PY) -m $* -c $< --opt='-O3 -fPIC' --quiet
 
 
 all:

@@ -7,7 +7,14 @@ from time import time as clock
 import sys
 from subprocess import call
 import os
-import fluxes as Flx
+try:
+    import fluxes as Flx
+except:
+    print("[ERROR] unable to import compiled module")
+    print("[INFO]  you likely forgot to compile the Fortran modules")
+    print("[INFO]  go in the main Fluid2d folder")
+    print("> make")
+    sys.exit()
 
 class Fluid2d(object):
     def __init__(self, param, grid):

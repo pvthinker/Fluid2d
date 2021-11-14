@@ -4,7 +4,17 @@ Vortex dynamics
 Several initial states are provided: select one with 'vortex_config'
 
 """
-from param import Param
+import sys
+try:
+    from param import Param
+except:
+    print("[ERROR] unable to import the param module")
+    print("[INFO]  you likely forgot to set $PYTHONPATH")
+    print("[INFO]  depending on your shell")
+    print("> source ~/.fluid2d/activate.sh")
+    print("> source ~/.fluid2d/activate.csh")
+    print("> source ~/.fluid2d/activate.fish")
+    sys.exit()
 from grid import Grid
 from fluid2d import Fluid2d
 import numpy as np
