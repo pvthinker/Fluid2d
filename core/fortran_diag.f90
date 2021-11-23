@@ -164,7 +164,7 @@
       integer*1,dimension(m,n) :: msk
       real*8,dimension(m,n) :: u,v
       real*8,intent(out) :: ke,maxu
-      real*8:: z,zu,zv,maxv
+      real*8:: z,zu,zv,maxv,um,vm
 
 !f2py intent(inplace)::u,v,msk
 !f2py intent(out)::ke,maxu
@@ -180,17 +180,17 @@
                !z = (u(j,i)+u(j,i-1))**2+(v(j,i)+v(j-1,i))**2
                zu = u(j,i)**2+u(j,i-1)**2
                zv = v(j,i)**2+v(j-1,i)**2
+               um = abs(u(j,i)+u(j,i-1))
+               vm = abs(v(j,i)+v(j-1,i))
                ke = ke + zu+zv
-               maxu = max(maxu,zu)!zu+zv)
-               maxv = max(maxv,zv)!zu+zv)
+               !maxu = max(maxu,zu)!zu+zv)
+               !maxv = max(maxv,zv)!zu+zv)
+               maxu = max(maxu,um+vm)
             endif
          enddo
       enddo
       ke = ke * 0.25
-      maxu=sqrt(maxu/2.)
-      maxv=sqrt(maxv/2.)
-      
-      maxu = maxu+maxv
+      maxu = maxu*0.5
 
       end subroutine
 
