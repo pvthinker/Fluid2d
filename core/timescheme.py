@@ -107,7 +107,7 @@ class Timescheme(object):
 
     # ----------------------------------------
     def LeapFrog(self, x, t, dt, **kwargs):
-        self.x[:] = x*1.
+        self.x[:] = x
         self.rhs(x, t, self.dx0)
         if self.first:
             x += dt * self.dx0
@@ -115,12 +115,12 @@ class Timescheme(object):
         else:
             x[:] = self.xb + (2*dt) * self.dx0
             # Asselin's filter
-            self.x += 0.5*self.asselin_cst*(x+self.xb-2*self.x)
-        self.xb[:] = self.x*1.
+            self.x += self.asselin_cst*(x+self.xb-2*self.x)
+        self.xb[:] = self.x
 
     # ----------------------------------------
     def LFAM3(self, x, t, dt, **kwargs):
-        self.x[:] = x*1.
+        self.x[:] = x
         self.kstage = 0
         self.rhs(x, t, self.dx0)
         if self.first:
@@ -135,7 +135,7 @@ class Timescheme(object):
             self.kstage = 1
             self.rhs(x, t+dt*.5, self.dx0)
             x[:] = self.x + dt*self.dx0
-        self.xb[:] = self.x*1.
+        self.xb[:] = self.x
 
     # ----------------------------------------
     def Heun(self, x, t, dt, **kwargs):
