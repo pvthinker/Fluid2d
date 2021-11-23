@@ -20,11 +20,12 @@ param.Ly = 1.
 param.geometry = 'disc'  # 'square', 'perio', 'disc'
 
 # time
-param.tend = 200.
-param.cfl = 0.4
+param.tend = 10.
+param.cfl = 1.5
 param.adaptable_dt = True
-param.dt = .1
-# param.dtmax=1e4
+param.dt = 1e4
+param.dtmax=1e4
+param.asselin_cst = 0.1
 
 # *** discretization ***
 param.order = 5  # 1,2,3,4,5 : order of the spatial discretization. Even
@@ -35,6 +36,8 @@ param.timestepping = 'RK3_SSP'  # LFAM3, Heun, EF, LF, RK3_SSP, AB2, AB3.
 # list, you may add your own in there
 #
 # table of CFL (from Lemarie et al 2015)
+#
+# their order=4 discretization is not the same as in Fluid2d
 #
 # |-------------+-------+-------+-------|
 # |    order    |   2   |   3   |   4   |
@@ -50,15 +53,15 @@ param.timestepping = 'RK3_SSP'  # LFAM3, Heun, EF, LF, RK3_SSP, AB2, AB3.
 #
 # ********* PARAMETERS CONTROLLING THE FLOW AND THE TRACER ********
 #
-flow_config = 1  # controls the flow (see below for the if then test)
-tracer_config = 0  # controls the tracer (see below)
+flow_config = 1  # controls the flow (0=translation, 1=body rotation, 2=shear, 3=vortex)
+tracer_config = 0  # controls the tracer (0 = isolated patch, 1=tiles, 2=square contour)
 
 
 # output
 param.var_to_save = ['tracer', 'psi']
 param.list_diag = ['mean', 'rms']
-param.freq_his = 1
-param.freq_diag = 1
+param.freq_his = .1
+param.freq_diag = .1
 
 # plot
 param.plot_var = 'tracer'  # 'psi' or 'tracer'
@@ -102,8 +105,8 @@ v = model.var.get('v')
 psi = model.var.get('psi')
 
 if flow_config == 0:  # pure translation
-    angle = 50.  # with respect to the x axis
-    speed = 0.1
+    angle = 0.  # with respect to the x axis
+    speed = 1.
     if param.geometry == 'perio':
         u[:] = speed*np.cos(angle*np.pi/180.)
         v[:] = speed*np.sin(angle*np.pi/180.)
@@ -165,20 +168,20 @@ if flow_config == 5:  # a complicated flow
 # normalize all flows with 'maxspeed=1'
 f2d.model.diagnostics(f2d.model.var, 0.)
 maxspeed = f2d.model.diags['maxspeed']
-u = u/maxspeed
-v = v/maxspeed
-psi = psi/maxspeed
+# u = u/maxspeed
+# v = v/maxspeed
+# psi = psi/maxspeed
 
 
 # 2/ set an initial tracer field
-sigma = 0.01*param.Lx
+sigma = 0.02*param.Lx
 
 
 if tracer_config == 0:  # single localized patch
-    state[:] = 2*vortex(0.3, 0.4, sigma)
+    state[:] = 1.2*vortex(0.3, 0.4, sigma)
 
 if tracer_config == 1:  # tiles
-    state[:] = round(xr*6) % 2 + round(yr*6) % 2
+    state[:] = (np.round(xr*6) % 2 + np.round(yr*6) % 2)/2
 
 if tracer_config == 2:  # a closed line
     x = xr/param.Lx
@@ -199,4 +202,7 @@ state[:] = dummy
 
 f2d.loop()
 
-print("pas de temps=", f2d.dt)
+print(f"pas de temps : {f2d.dt:.3e}")
+print(f"vitesse max  : {maxspeed:.3e}")
+print(f"grid size dx : {grid.dx:.3e}")
+print(f"CFL          : {param.cfl:.2f}")
