@@ -379,13 +379,14 @@ class Fluid2d(object):
             dt = self.cfl * min(self.dx, self.dy) / \
                 self.model.diags['maxspeed']
             # filter in time, change the filter_coef
-            if dt > 0.8*self.dt:
-                self.filter_coef = 0.05
-            else:
-                # time step decreases too fast
-                # don't filter, otherwise the model blows up
-                self.filter_coef = 1.
-            self.dt = (1.-self.filter_coef)*self.dt + self.filter_coef*dt
+            # if dt > 0.8*self.dt:
+            #     self.filter_coef = 0.05
+            # else:
+            #     # time step decreases too fast
+            #     # don't filter, otherwise the model blows up
+            #     self.filter_coef = 1.
+            # self.dt = (1.-self.filter_coef)*self.dt + self.filter_coef*dt
+            self.dt = dt
             if self.dt > self.dtmax:
                 self.dt = self.dtmax
 
