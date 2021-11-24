@@ -3,7 +3,6 @@ from param import Param
 from grid import Grid
 from fluid2d import Fluid2d
 import numpy as np
-#from numpy import arange, exp, min, max, sqrt, nan, round, pi, cos, sin, roll, zeros_like, random
 
 
 param = Param('default')
@@ -17,7 +16,7 @@ param.npx = 1
 param.npy = 1
 param.Lx = 1.
 param.Ly = 1.
-param.geometry = 'disc'  # 'square', 'perio', 'disc'
+param.geometry = 'disc'  # 'square', 'perio', 'disc', 'xchannel'
 
 # time
 param.tend = 10.
@@ -25,26 +24,27 @@ param.cfl = 1.5
 param.adaptable_dt = True
 param.dt = 1e4
 param.dtmax=1e4
-param.asselin_cst = 0.1
+param.asselin_cst = 0.1 # to go with the Leap-Frog time stepping
 
 # *** discretization ***
-param.order = 5  # 1,2,3,4,5 : order of the spatial discretization. Even
-# cases are centered fluxes, odd cases are upwinded
-# fluxes
+param.order = 5  # order of the spatial discretization, between 1 and 5
+# Even orders are centered fluxes
+# Odd orders  are upwinded fluxes
+
 param.timestepping = 'RK3_SSP'  # LFAM3, Heun, EF, LF, RK3_SSP, AB2, AB3.
 # See core/timestepping.py to see the
 # list, you may add your own in there
 #
 # table of CFL (from Lemarie et al 2015)
 #
-# their order=4 discretization is not the same as in Fluid2d
+# caution: their order=4 discretization is not the same as in Fluid2d
 #
 # |-------------+-------+-------+-------|
 # |    order    |   2   |   3   |   4   |
 # |-------------+-------+-------+-------|
-# | LFRA nu=0.1 | 0.904 | 0.472 | 0.522 | use 'LF', the Robert-Asselin constant is set to 0.1
+# | LFRA nu=0.1 | 0.904 | 0.472 | 0.522 |
 # | LFAM3       | 1.587 | 0.871 | 0.916 |
-# | AB2 eps=0.1 | 0.503 | 0.554 | 0.29  | 'eps' is set to 0.1 in core/timestepping.py
+# | AB2 eps=0.1 | 0.503 | 0.554 | 0.29  |
 # | AB3         | 0.724 | 0.397 | 0.418 |
 # | RK3         |  1.73 | 1.626 |     1 |
 # |-------------+-------+-------+-------|
@@ -53,8 +53,17 @@ param.timestepping = 'RK3_SSP'  # LFAM3, Heun, EF, LF, RK3_SSP, AB2, AB3.
 #
 # ********* PARAMETERS CONTROLLING THE FLOW AND THE TRACER ********
 #
-flow_config = 1  # controls the flow (0=translation, 1=body rotation, 2=shear, 3=vortex)
-tracer_config = 0  # controls the tracer (0 = isolated patch, 1=tiles, 2=square contour)
+flow_config = 1 # controls the flow
+# 0: translation (it needs param.geometry = 'perio')
+# 1: body rotation
+# 2: shear
+# 3: vortex
+
+tracer_config = 0  # controls the tracer
+# 0: isolated patch, width controlled with patch_width
+# 1: tiles
+# 2: dx width square contour
+patch_width = 0.02*param.Lx
 
 
 # output
@@ -88,102 +97,79 @@ f2d = Fluid2d(param, grid)
 model = f2d.model
 
 
-def vortex(x0, y0, sigma):
+def gaussian_shape(x0, y0, sigma):
     x = np.sqrt((xr-param.Lx*x0)**2+(yr-param.Ly*y0)**2)
     y = 2-2./(1+np.exp(-x/sigma))
-    #y = cos(x/sigma*pi/2)
+    # y = cos(x/sigma*pi/2)
     # y[x>sigma]=0.
     return y
 
 
-xr, yr = grid.xr, grid.yr
+
 # 1/ set the stream function
 
 state = model.var.get('tracer')
 u = model.var.get('u')
 v = model.var.get('v')
 psi = model.var.get('psi')
+xr, yr = grid.xr, grid.yr
 
 if flow_config == 0:  # pure translation
+    assert param.geometry == 'perio', '[ERROR]: param.geometry should be perio'
     angle = 0.  # with respect to the x axis
     speed = 1.
-    if param.geometry == 'perio':
-        u[:] = speed*np.cos(angle*np.pi/180.)
-        v[:] = speed*np.sin(angle*np.pi/180.)
-    else:
-        print('param.geometry should be perio')
-        exit(0)
+    u[:] = speed*np.cos(angle*np.pi/180.)
+    v[:] = speed*np.sin(angle*np.pi/180.)
 
-if flow_config == 1:  # body rotation
-    if param.geometry != 'perio':
-        state[:] = 1.
-        state[:] = state[:]*grid.msk
-        # determine the stream function from the vorticity
-        model.set_psi_from_tracer()
-    else:
-        print('param.geometry should not be perio')
-        exit(0)
+elif flow_config == 1:  # body rotation
+    assert param.geometry != 'perio', '[ERROR]: param.geometry should not be perio'
+    state[:] = 1.
+    state[:] = state[:]*grid.msk
 
-if flow_config == 2:  # horizontal shear
-    if param.geometry == 'xchannel':
-        state[:] = -1.
-        state[:] = state[:]*grid.msk
-        # determine the stream function from the vorticity
-        model.set_psi_from_tracer()
-    else:
-        print('param.geometry should be xchannel')
-        exit(0)
+elif flow_config == 2:  # horizontal shear
+    assert param.geometry == 'xchannel', '[ERROR]: param.geometry should be xchannel'
+    state[:] = -1.
+    state[:] = state[:]*grid.msk
 
-if flow_config == 3:  # single vortex
+elif flow_config == 3:  # single vortex
     sigma = grid.dx*5
-    state[:] = 100.*vortex(0.5, 0.5, sigma)
-    # determine the stream function from the vorticity
-    model.set_psi_from_tracer()
+    state[:] = 100.*gaussian_shape(0.5, 0.5, sigma)
+
+elif flow_config == 4:  # quadrupole
+    assert param.geometry == 'perio', '[ERROR]: param.geometry should be perio'
+    sigma = 5*grid.dx
+    state[:] = gaussian_shape(0.75, 0.75, sigma)  # single vortex
+    state[:] += gaussian_shape(0.25, 0.25, sigma)  # single vortex
+    state[:] -= gaussian_shape(0.25, 0.75, sigma)  # single vortex
+    state[:] -= gaussian_shape(0.75, 0.25, sigma)  # single vortex
 
 
-if flow_config == 4:  # quadrupole
-    if param.geometry == 'perio':
-        sigma = 5*grid.dx
-        state[:] = vortex(0.75, 0.75, sigma)  # single vortex
-        state[:] += vortex(0.25, 0.25, sigma)  # single vortex
-        state[:] -= vortex(0.25, 0.75, sigma)  # single vortex
-        state[:] -= vortex(0.75, 0.25, sigma)  # single vortex
-        # determine the stream function from the vorticity
-        model.set_psi_from_tracer()
-    else:
-        print('param.geometry should be perio')
-        exit(0)
-
-if flow_config == 5:  # a complicated flow
-
-    for k in range(6):
+elif flow_config == 5:  # a complicated flow
+    assert param.geometry in ['perio', 'closed'], '[ERROR]: param.geometry should be perio or closed'
+    np.random.seed(42)
+    for k in range(8):
         sigma = np.random.uniform(10)*grid.dx
+        sign = np.random.randint(2)*2-1
         x0 = np.random.uniform()
         y0 = np.random.uniform()
-        state[:] += vortex(x0, y0, sigma)  # single vortex
-        # determine the stream function from the vorticity
-        model.set_psi_from_tracer()
+        state[:] += sign*gaussian_shape(x0, y0, sigma)/np.sqrt(sigma)
 
+else:
+    raise ValueError("[ERROR]: undefined flow_config")
 
-# normalize all flows with 'maxspeed=1'
-f2d.model.diagnostics(f2d.model.var, 0.)
-maxspeed = f2d.model.diags['maxspeed']
-# u = u/maxspeed
-# v = v/maxspeed
-# psi = psi/maxspeed
+model.set_psi_from_tracer()
+
 
 
 # 2/ set an initial tracer field
-sigma = 0.02*param.Lx
-
 
 if tracer_config == 0:  # single localized patch
-    state[:] = 1.2*vortex(0.3, 0.4, sigma)
+    state[:] = 1.2*gaussian_shape(0.3, 0.4, patch_width)
 
-if tracer_config == 1:  # tiles
+elif tracer_config == 1:  # tiles
     state[:] = (np.round(xr*6) % 2 + np.round(yr*6) % 2)/2
 
-if tracer_config == 2:  # a closed line
+elif tracer_config == 2:  # a closed line
     x = xr/param.Lx
     y = yr/param.Ly
     msk = np.zeros_like(yr)
@@ -192,6 +178,9 @@ if tracer_config == 2:  # a closed line
         np.roll(msk, +1, axis=1)+np.roll(msk, +1, axis=0)-4*msk
     state[:] = 0.
     state[z > 0] = 4.
+
+else:
+    raise ValueError("[ERROR]: undefined tracer_config")
 
 
 state[:] *= grid.msk
@@ -202,7 +191,9 @@ state[:] = dummy
 
 f2d.loop()
 
-print(f"pas de temps : {f2d.dt:.3e}")
-print(f"vitesse max  : {maxspeed:.3e}")
-print(f"grid size dx : {grid.dx:.3e}")
-print(f"CFL          : {param.cfl:.2f}")
+maxspeed = f2d.model.diags['maxspeed']
+
+print(f"time step : {f2d.dt:.3e}")
+print(f"max speed : {maxspeed:.3e}")
+print(f"grid size : {grid.dx:.3e}")
+print(f"CFL       : {param.cfl:.2f}")
