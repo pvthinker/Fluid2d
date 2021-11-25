@@ -5,7 +5,7 @@ import numpy as np
 
 param = Param('default.xml')
 param.modelname = 'euler'
-param.expname = 'fd_00'
+param.expname = 'freedecay'
 
 # domain and resolution
 param.nx = 64*2
