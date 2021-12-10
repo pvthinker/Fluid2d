@@ -3,6 +3,10 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
+.. toctree::
+   :maxdepth: 2
+
+
 Welcome to Fluid2d documentation
 ================================
 
@@ -49,32 +53,29 @@ This code have been developed over many years of teaching numerical
 methods for CFD. The first version of this code was in Matlab under
 the impulse of the FDSE Summer School. A special credit to Caroline
 Muller who makes this code happen in the first place. A full writing
-in python has been done with the great help of Clement Vic (now at
-Southampton) and Nicolas Grima (CNRS engineer). Others Students have
-contributed to either the coding or a better understanding of how the
-numerics handles dissipation. They should be thanked here: Ljuba Novi
-for the work on RK3 and up5, Alexander Siteur for his work on the
-pressure (not yet implemented in this version), Milan Kloewer for his
-work on a level set implementation (not present in this version) and
-Mathieu Morvan for the dipole wall interaction. Finally, the code has
-benefited from my enthusiastic collaboration with
-Professor J. C. McWilliams.
+in python has been done with the great help of Clement Vic and Nicolas
+Grima (CNRS engineer). Others Students have contributed to either the
+coding or a better understanding of how the numerics handles
+dissipation. They should be thanked here: Ljuba Novi for the work on
+RK3 and up5, Alexander Siteur for his work on the pressure (not yet
+implemented in this version), Milan Kloewer for his work on a level
+set implementation (not present in this version), Mathieu Morvan for
+the dipole wall interaction and Markus Reinert for his many valuable
+feedbacks. Finally, the code has benefited from my enthusiastic
+collaboration with Professor J. C. McWilliams.
 
 
 Where to start?
 ---------------
 
-You may have a quick look at the :ref:`gallery` to see the possibilities,
-then peruse rapidly the list of :ref:`avail-exp`  and finally :ref:`install`.
+You may have a quick look at the :ref:`gallery` to see the possibilities. Then you need to  :ref:`install` it and start your first experiment.
 
-At any moment, use the search bar on the right. It works amazingly. I
-did nothing. It all comes with Sphinx, this documentation generator.
 
 
 Cite the code
 -------------
 
-As of March 2017, the paper is still in preparation. If you use the
+The code has never been published and will likely never be. If you use the
 code for your classes or your research I would appreciate your
 feedbacks (mailto: roullet AT univ-brest.fr)
 
@@ -106,5 +107,4 @@ Contents:
    gallery/gallery
    docs/model_equations
    docs/model_numerics
-   experiments/list_of_experiments
    docs/howto
