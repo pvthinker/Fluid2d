@@ -12,9 +12,9 @@ except:
 
 from numpy import zeros, arange, sqrt, array, meshgrid, ones, concatenate, unique, random, pi, int8, size, isnan, exp, NaN, asarray
 from time import time
-# from fortran_multigrid import *
-from gmg.subdomains import *
-from gmg.halo import *
+import gmg.subdomains as subdomains
+import gmg.fortran_multigrid as fortmg
+import gmg.halo as halo
 import sys
 # from misc_mpi import *
 # from plotutils import plot2d
@@ -201,17 +201,17 @@ class Grid(object):
             method = 2  # use MPI communications and Fortran routines
 
         if self.flag == 'peak':
-            family = set_family(myrank, np0, mp0, ix, iy)
+            family = subdomains.set_family(myrank, np0, mp0, ix, iy)
             reducj = family.shape[0]
             reduci = family.shape[1]
             # coarser resolution
             self.nc = n//reduci+2*nh
             self.mc = m//reducj+2*nh
-            self.subdom = Subdomains(
+            self.subdom = subdomains.Subdomains(
                 nh, self.nc, self.mc, comm, family, method=method)
 
-        neighbours = set_neighbours(myrank, np0, mp0, ix, iy)
-        self.halo = Halo(nh, nv, mv, comm, neighbours,
+        neighbours = halo.set_neighbours(myrank, np0, mp0, ix, iy)
+        self.halo = halo.Halo(nh, nv, mv, comm, neighbours,
                          method=method)  # check method
 
         self.msk = ones((mv, nv), dtype=int8)  # default mask full of ones
@@ -318,7 +318,7 @@ class Grid(object):
             # let's coarsen the matrix, done in Fortran
             # we want
             # Acoarse = R * Afine * I
-            A = coarsenmatrix(prevlev.A, prevlev.msk, msk, prevlev.nh)
+            A = fortmg.coarsenmatrix(prevlev.A, prevlev.msk, msk, prevlev.nh)
             # don't forget to fill the halo
             for k in range(9):
                 i, j = k % 3, k//3
@@ -346,9 +346,9 @@ class Grid(object):
 #                MPI.COMM_WORLD.Barrier()
                 # we apply the smoothing twice
                 if self.relaxation == 'tridiagonal':
-                    smoothtridiag(self.msk, self.A, x, b)
+                    fortmg.smoothtridiag(self.msk, self.A, x, b)
                 else:
-                    smoothtwicewitha(self.msk, self.A, x,
+                    fortmg.smoothtwicewitha(self.msk, self.A, x,
                                      b, self.omega, self.yo)
 
 #                smoothoncewitha(self.msk,self.A,x,b,self.omega,self.yo)
@@ -371,7 +371,7 @@ class Grid(object):
         for l in range(self.nbresidual):
             t0 = time()
 #            MPI.COMM_WORLD.Barrier()
-            computeresidualwitha(self.msk, self.A, x, b, r)
+            fortmg.computeresidualwitha(self.msk, self.A, x, b, r)
             t1 = time()
             self.time['res'] += t1-t0
             self.ncalls['res'] += 1
@@ -394,7 +394,7 @@ class Grid(object):
         t0 = time()
 #        MPI.COMM_WORLD.Barrier()
         if self.typenorm == 'l2':
-            local_sum = computenorm(self.msk, x, self.nh)
+            local_sum = fortmg.computenorm(self.msk, x, self.nh)
             t1 = time()
             self.time['norm'] += t1-t0
             self.ncalls['norm'] += 1
@@ -405,7 +405,7 @@ class Grid(object):
             self.ncalls['reduce'] += 1
 
         if self.typenorm == 'inf':
-            local_z = computemax(self.msk, x, self.nh)
+            local_z = fortmg.computemax(self.msk, x, self.nh)
             t1 = time()
             self.time['norm'] += t1-t0
             self.ncalls['norm'] += 1
@@ -420,7 +420,7 @@ class Grid(object):
         nbduplicates = (self.np0*self.mp0)/(self.np*self.mp)
         # computenorm is done in Fortran
 
-        local_sum = computeinner(self.msk, x, y, self.nh)
+        local_sum = fortmg.computeinner(self.msk, x, y, self.nh)
         z = MPI.COMM_WORLD.allreduce(local_sum, op=MPI.SUM) / nbduplicates
 
         return z
@@ -430,7 +430,7 @@ class Grid(object):
         t0 = time()
 #        MPI.COMM_WORLD.Barrier()
         nbduplicates = (self.np0*self.mp0)/(self.np*self.mp)
-        local_sum = computesum(self.msk, x, self.nh)
+        local_sum = fortmg.computesum(self.msk, x, self.nh)
         t1 = time()
         self.time['sum'] += t1-t0
         self.ncalls['sum'] += 1
@@ -457,7 +457,7 @@ def coarsetofine(coarse, fine, x, y):
             coarse.ncalls['split'] += 1
         else:
             t0 = time()
-            interpolate(fine.msk, coarse.msk, x, fine.nh, y)
+            fortmg.interpolate(fine.msk, coarse.msk, x, fine.nh, y)
             t1 = time()
             fine.time['interpolate'] += t1-t0
             fine.ncalls['interpolate'] += 1
@@ -480,7 +480,7 @@ def finetocoarse(fine, coarse, x, y):
             coarse.ncalls['gather'] += 1
         else:
             t0 = time()
-            restrict(coarse.msk, x, coarse.nh, y)
+            fortmg.restrict(coarse.msk, x, coarse.nh, y)
             t1 = time()
             coarse.time['restrict'] += t1-t0
             coarse.ncalls['restrict'] += 1

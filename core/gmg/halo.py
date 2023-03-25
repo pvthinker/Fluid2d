@@ -12,9 +12,8 @@ except:
        
 from numpy import zeros,arange,sqrt,int32,meshgrid,where
 from time import time
-from gmg.fortran_multigrid import *
+import gmg.fortran_multigrid as fortmg
 import numpy 
-#from fillhalo import fillhalo_fortran
 
 
 def set_neighbours(myrank,np,mp,ix,iy):
@@ -139,7 +138,7 @@ class Halo(object):
         # fill the halo if proc only knows a subdomain
         if self.method==0:
             for k in range(self.nbhalo):
-                fillhalo(x,self.nh)
+                fortmg.fillhalo(x,self.nh)
 #            x=zeros((self.m,self.n))
         elif self.method==1:
 
@@ -242,7 +241,7 @@ class Halo(object):
                 # b6=self.sbuff[6]
                 # b7=self.sbuff[7]
 
-                halotobuffer(x,
+                fortmg.halotobuffer(x,
                              self.sbuff[0],self.sbuff[1],self.sbuff[2],
                              self.sbuff[3],              self.sbuff[4],
                              self.sbuff[5],self.sbuff[6],self.sbuff[7])
@@ -285,7 +284,7 @@ class Halo(object):
 
     #            x=buffertohalo(x,b0,b1,b2,b3,b4,b5,b6,b7)
 
-                buffertohalo(x,
+                fortmg.buffertohalo(x,
                              self.rbuff[0],self.rbuff[1],self.rbuff[2],
                              self.rbuff[3],self.rbuff[4],
                              self.rbuff[5],self.rbuff[6],self.rbuff[7])
@@ -296,7 +295,7 @@ class Halo(object):
         elif self.method==3:
             comm = MPI.COMM_WORLD
             for l in range(self.nbhalo):
-                halotobuffer(x,
+                fortmg.halotobuffer(x,
                              self.sbuff[0],self.sbuff[1],self.sbuff[2],
                              self.sbuff[3],              self.sbuff[4],
                              self.sbuff[5],self.sbuff[6],self.sbuff[7])
@@ -312,7 +311,7 @@ class Halo(object):
                 for k in range(8):
                     req[k].Wait(MPI.Status())
 
-                buffertohalo(x,
+                fortmg.buffertohalo(x,
                              self.rbuff[0],self.rbuff[1],self.rbuff[2],
                              self.rbuff[3],self.rbuff[4],
                              self.rbuff[5],self.rbuff[6],self.rbuff[7])

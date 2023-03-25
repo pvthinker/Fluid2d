@@ -63,7 +63,8 @@ echo " Compile modules with f2py"
 echo ""
 {
     # try
-    make
+    #make
+    python3 build.py
     
 } || {
     #catch

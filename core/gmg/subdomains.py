@@ -11,7 +11,8 @@ except:
     exit(0)
 
 from numpy import zeros,arange,ones,cumsum,sqrt,array,meshgrid
-from gmg.fortran_multigrid import buffertodomain
+#from gmg.fortran_multigrid import buffertodomain
+import gmg.fortran_multigrid as fortmg
 from time import time
 #from plotutils import plot2d
 
@@ -111,7 +112,7 @@ class Subdomains(object):
 
 
             b = self.rbuff.reshape( (self.mp,self.np,self.m,self.n))
-            buffertodomain(b,y,self.nh,self.m1,self.n1)
+            fortmg.buffertodomain(b,y,self.nh,self.m1,self.n1)
 
         
     def split(self,x,y):
