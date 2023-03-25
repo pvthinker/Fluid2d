@@ -68,7 +68,7 @@ def Gridinfo(param):
             dx = dx*2
             dy = dy*2
             flag = 'regular'
-            if((n < n1)or(m < n1))and(np*mp > 1):  # but sometimes gather
+            if((n < n1) or (m < n1)) and (np*mp > 1):  # but sometimes gather
                 dx = dx/2
                 dy = dy/2
                 flag = 'peak'
@@ -87,7 +87,7 @@ def Gridinfo(param):
         else:
             flag = 'finest'
 
-        if(np*mp == npmpmax)and((n <= n0)or(m <= n0)):
+        if(np*mp == npmpmax) and ((n <= n0) or (m <= n0)):
             #        if( (n==n0)or(m==n0) ):
             ok = True
             flag = 'coarsest'
@@ -212,7 +212,7 @@ class Grid(object):
 
         neighbours = halo.set_neighbours(myrank, np0, mp0, ix, iy)
         self.halo = halo.Halo(nh, nv, mv, comm, neighbours,
-                         method=method)  # check method
+                              method=method)  # check method
 
         self.msk = ones((mv, nv), dtype=int8)  # default mask full of ones
 
@@ -269,7 +269,7 @@ class Grid(object):
         # 9 points 2D Laplacian stencil [the factor 1/2 is weird but
         # in practice it should be here].
 
-        if self.dx == self.dy:
+        if (self.dx == self.dy) and (self.hydroepsilon == 1):
             if self.myrank == 0:
                 print('  => use the nine points stencil')
             a, b, c = -6./2, 1./2, 0.5/2
@@ -349,7 +349,7 @@ class Grid(object):
                     fortmg.smoothtridiag(self.msk, self.A, x, b)
                 else:
                     fortmg.smoothtwicewitha(self.msk, self.A, x,
-                                     b, self.omega, self.yo)
+                                            b, self.omega, self.yo)
 
 #                smoothoncewitha(self.msk,self.A,x,b,self.omega,self.yo)
 #                smoothoncewitha(self.msk,self.A,x,b,self.omega,self.yo)
