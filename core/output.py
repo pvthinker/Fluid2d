@@ -26,7 +26,6 @@ class Output(Param):
         self.template = self.expdir+'/%s_his_%03i.nc'
         if self.nbproc > 1:
             self.hisfile = self.template % (self.expname, self.myrank)
-            self.hisfile_joined = '%s/%s_his.nc' % (self.expdir, self.expname)
         else:
             self.hisfile = '%s/%s_his.nc' % (self.expdir, self.expname)
 
@@ -43,7 +42,6 @@ class Output(Param):
             template = self.expdir+'/%s_flx_%03i.nc'
             if self.nbproc > 1:
                 self.flxfile = template % (self.expname, self.myrank)
-                self.flxfile_joined = '%s/%s_flx.nc' % (self.expdir, self.expname)
             else:
                 self.flxfile = '%s/%s_flx.nc' % (self.expdir, self.expname)
 
@@ -154,13 +152,13 @@ class Output(Param):
     def join(self):
         if self.nbproc > 1:
             filename = self.hisfile.split('his')[0]+'his'
-            join(filename)
+            self.hisfile = join(filename)
             if self.diag_fluxes:
                 filename = self.flxfile.split('flx')[0]+'flx'
-                join(filename)
-                
-            
-            
+                self.flxfile = join(filename)
+
+
+
 class NcfileIO(object):
     """Allow to create() and write() a Netcdf file of 'history' type,
     i.e. a set of model 2D snapshots. Variables were originally the
@@ -250,7 +248,8 @@ def join(filename):
     ''' Join history files without having to mpirun
 
     Useful when the run has been broken and one wants to join
-    things from an interactive session '''
+    things from an interactive session.
+    Return the name of the new, joined history file. '''
 
     template = filename+'_%03i.nc'
     hisfile_joined = filename+'.nc'
@@ -390,3 +389,5 @@ def join(filename):
         os.remove(ncfile)
 
     print('-'*50)
+
+    return hisfile_joined
