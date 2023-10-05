@@ -14,4 +14,51 @@ animations. It is quite easy to go beyond textbooks and to reach
 research questions.
 
 
-Project's homepage: http://pagesperso.univ-brest.fr/~roullet/fluid2d/
+# Install
+Fluid2d installation does not rely on the standard `pip install Fluid2d`. The procedure is a bit more convoluted
+
+  1) git clone Fluid2d. To copy-paste from your computer to the virtual desktop, use the copy-paste interactive window on the left
+
+> git clone https://github.com/pvthinker/Fluid2d.git
+
+  2) create the conda environment (this step may fail in that case, execute the next step). It takes a few minutes to download everything. It’s a bit a shame to have to download all these packages in your $HOME but that’s how it works.
+
+> cd Fluid2d
+> conda create --name fluid2d --file requirements.txt
+
+if conda create fails
+
+> conda init bash
+
+then close the terminal, reopen a new one, module load anaconda3 and repeat the conda
+
+> create --name fluid2d --file requirements.txt
+
+That should work.
+
+  3) activate this environment
+
+> conda activate fluid2d
+
+  4) you can now build Fluid2d
+
+> ./install.sh
+
+  5) last step, make Python aware of where Fluid2d is
+
+> source ~/.fluid2d/activate.sh
+
+you’re good to run Fluid2d
+
+  6) run your first experiment
+
+> cd myexp/Vortex
+> python vortex.py
+
+
+# Run an experiment
+  Once the code is installed, you don't need to repeat stage 4).
+
+  What you need to do though, every time you run Fluid2d in a new
+  terminal is to repeat stages 3) and 5), then do something like 6)
+  but with another experiment.

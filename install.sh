@@ -40,20 +40,20 @@ cp -pR $srcdir/experiments/* $myexpdir
 
 # for bash users
 cat > $pydir/activate.sh << EOF
-export PYTHONPATH=`pwd`/core
+export PYTHONPATH=`pwd`/core:`pwd`/core/gmg
 echo Python now knows that Fluid2d is in `pwd`
 EOF
 
 # for csh, tcsh users
 cat > $pydir/activate.csh << EOF
-setenv PYTHONPATH `pwd`/core
+setenv PYTHONPATH `pwd`/core:`pwd`/core/gmg
 echo Python now knows that Fluid2d is in `pwd`
 EOF
 
 # for fish users
 cat > $pydir/activate.fish << EOF
-set -gx PYTHONPATH `(pwd)`/core
-echo Python now knows that Fluid2d is in `(pwd)`
+set -gx PYTHONPATH (pwd)/core:(pwd)/core/gmg
+echo Python now knows that Fluid2d is in (pwd)
 EOF
 
 # compile the modules with module
