@@ -24,6 +24,7 @@ Fluid2d installation does not rely on the standard `pip install Fluid2d`. The pr
   2) create the conda environment (this step may fail in that case, execute the next step). It takes a few minutes to download everything. It’s a bit a shame to have to download all these packages in your $HOME but that’s how it works.
 
 > cd Fluid2d
+
 > conda create --name fluid2d --file requirements.txt
 
 if conda create fails
@@ -53,6 +54,7 @@ you’re good to run Fluid2d
   6) run your first experiment
 
 > cd myexp/Vortex
+
 > python vortex.py
 
 
