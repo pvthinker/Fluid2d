@@ -40,7 +40,7 @@ class Plotting(object):
         self.xmin, self.xmax = grid.xr[nh, nh]-dx2, grid.xr[0, -nh]+dx2
         self.ymin, self.ymax = grid.yr[nh, nh]-dx2, grid.yr[-nh, 0]+dx2
 
-        cmap_list = plt.cm.cmap_d.keys()
+        cmap_list = plt.colormaps()
         if self.cmap in cmap_list:
             self.cmap_obj = plt.get_cmap(self.cmap)
         else:
