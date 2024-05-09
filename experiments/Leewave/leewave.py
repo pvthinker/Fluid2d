@@ -1,7 +1,7 @@
+from fluid2d import Fluid2d
 from param import Param
 from grid import Grid
-from fluid2d import Fluid2d
-from numpy import exp, sqrt, pi, cos, where, random, shape, tanh, cumsum, cosh
+import numpy as np
 from restart import Restart
 from island import Island
 
@@ -66,14 +66,14 @@ Lseamount = 0.1
 U = .5
 
 # add a seamount
-z = grid.yr-hseamount*exp(-(grid.xr0+0.5)**2/(Lseamount**2/2))
+z = grid.yr-hseamount*np.exp(-(grid.xr0+0.5)**2/(Lseamount**2/2))
 grid.msk[z <= 0] = 0
 
 
 if grid.j0 == param.npy-1:
     msk = grid.msk.copy()*0
     msk[-nh:-1, :] = 1
-    idx = where(msk == 1)
+    idx = np.where(msk == 1)
     grid.island.add(idx, -U)
 
 

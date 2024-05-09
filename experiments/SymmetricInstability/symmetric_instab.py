@@ -1,14 +1,14 @@
+from fluid2d import Fluid2d
 import numpy as np
 from param import Param
 from grid import Grid
-from fluid2d import Fluid2d
 from scipy.special import erf
 from restart import Restart
 from island import Island
 
 param = Param('default.xml')
 param.modelname = 'thermalwind'
-param.expname = 'SI_00'
+param.expname = 'SI'
 
 
 # domain and resolution

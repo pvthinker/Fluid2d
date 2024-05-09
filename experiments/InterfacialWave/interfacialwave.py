@@ -6,9 +6,9 @@ for a small 'amplitude' this is a gentle oscillation
 for a larger 'amplitude' the wave breaks
 
 """
+from fluid2d import Fluid2d
 from param import Param
 from grid import Grid
-from fluid2d import Fluid2d
 from numpy import exp, sqrt, pi, cos, sin, where, random, shape, tanh, cumsum, cosh
 import numpy as np
 from restart import Restart

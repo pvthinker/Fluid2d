@@ -1,11 +1,11 @@
+from fluid2d import Fluid2d
 from param import Param
 from grid import Grid
-from fluid2d import Fluid2d
-from numpy import exp, sqrt, pi, cos, random, shape
+import numpy as np
 
 param = Param('default.xml')
 param.modelname = 'quasigeostrophic'
-param.expname = 'vortex_beta_0'
+param.expname = 'vortex_beta'
 
 # domain and resolution
 param.nx = 64*2
@@ -66,16 +66,16 @@ vor = model.var.get('pv')
 def vortex(param, grid, x0, y0, sigma, vortex_type, ratio=1):
     xr, yr = grid.xr, grid.yr
     # ratio controls the ellipticity, ratio=1 is a disc
-    x = sqrt((xr-param.Lx*x0)**2+(yr-param.Ly*y0)**2*ratio**2)
+    x = np.sqrt((xr-param.Lx*x0)**2+(yr-param.Ly*y0)**2*ratio**2)
 
     y = x.copy()*0.
 
     if vortex_type in ('gaussian', 'cosine', 'step'):
         if vortex_type == 'gaussian':
-            y = exp(-x**2/(sigma**2))
+            y = np.exp(-x**2/(sigma**2))
 
         if vortex_type == 'cosine':
-            y = cos(x/sigma*pi/2)
+            y = np.cos(x/sigma*pi/2)
             y[x > sigma] = 0.
 
         if vortex_type == 'step':

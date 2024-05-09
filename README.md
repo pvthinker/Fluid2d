@@ -64,3 +64,15 @@ you’re good to run Fluid2d
   What you need to do though, every time you run Fluid2d in a new
   terminal is to repeat stages 3) and 5), then do something like 6)
   but with another experiment.
+
+# Most frequent error
+
+  When trying to run an experiment you may get the following error message
+
+  ModuleNotFoundError: No module named 'fluid2d'
+
+  it is most likely because you forgot to activate Fluid2d. Fix it with
+
+> source ~/.fluid2d/activate.sh
+
+  and it should work

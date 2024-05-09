@@ -1,11 +1,11 @@
+from fluid2d import Fluid2d
 from param import Param
 from grid import Grid
-from fluid2d import Fluid2d
 import numpy as np
 
 param = Param('default.xml')
 param.modelname = 'boussinesq'
-param.expname = 'RB_00'
+param.expname = 'RB'
 
 # domain and resolution
 param.nx = 64*2

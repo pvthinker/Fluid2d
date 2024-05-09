@@ -1,7 +1,6 @@
+from fluid2d import Fluid2d
 from param import Param
 from grid import Grid
-from fluid2d import Fluid2d
-from numpy import exp, sqrt, pi, cos, sin, where, random, shape, tanh, cumsum, cosh
 import numpy as np
 from restart import Restart
 from island import Island
@@ -89,12 +88,12 @@ else:
 model.bref[:, :] = buoy
 
 y = -grid.yr0
-perturb = amplitude*exp(-(grid.yr0**2+grid.xr0**2)/(2*delta**2))
+perturb = amplitude*np.exp(-(grid.yr0**2+grid.xr0**2)/(2*delta**2))
 buoy += perturb
 
 # we perturb the fluid by introducing a localized dipole of vorticity
 x = grid.xr0
-#vor[:, :] = perturb*sin(x*2*pi*2)/delta * grid.msk
+#vor[:, :] = perturb*np.sin(x*2*pi*2)/delta * grid.msk
 
 
 model.set_psi_from_vorticity()

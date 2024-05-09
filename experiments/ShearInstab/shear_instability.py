@@ -1,11 +1,11 @@
+from fluid2d import Fluid2d
 from param import Param
 from grid import Grid
-from fluid2d import Fluid2d
 import numpy as np
 
 param = Param('default.xml')
 param.modelname = 'euler'
-param.expname = 'shear_instab_00'
+param.expname = 'shear_instab'
 
 # domain and resolution
 param.nx = 64*2*2

@@ -1,9 +1,9 @@
 """
 Lock exchange experiment
 """
+from fluid2d import Fluid2d
 from param import Param
 from grid import Grid
-from fluid2d import Fluid2d
 import numpy as np
 
 param = Param('default.xml')

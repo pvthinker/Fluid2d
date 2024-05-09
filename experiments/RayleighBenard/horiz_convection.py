@@ -1,11 +1,11 @@
+from fluid2d import Fluid2d
 from param import Param
 from grid import Grid
-from fluid2d import Fluid2d
 import numpy as np
 
 param = Param('default.xml')
 param.modelname = 'boussinesq'
-param.expname = 'HorConv_04'
+param.expname = 'HorConv'
 
 # domain and resolution
 param.nx = 64*4

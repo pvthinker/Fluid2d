@@ -4,28 +4,16 @@ Vortex dynamics
 Several initial states are provided: select one with 'vortex_config'
 
 """
-import sys
-try:
-    from param import Param
-except:
-    print("[ERROR] unable to import the param module")
-    print("[INFO]  you likely forgot to set $PYTHONPATH")
-    print("[INFO]  depending on your shell")
-    print("> source ~/.fluid2d/activate.sh")
-    print("> source ~/.fluid2d/activate.csh")
-    print("> source ~/.fluid2d/activate.fish")
-    sys.exit()
-from grid import Grid
 from fluid2d import Fluid2d
+from param import Param
+from grid import Grid
 import numpy as np
 import ana_profiles as ap
 
 # If the code immediately stops with
 
-# Traceback (most recent call last):
-#   File "vortex.py", line 1, in <module>
-#     from param import Param
-# ImportError: No module named param
+ #    from fluid2d import Fluid2d
+# ModuleNotFoundError: No module named 'fluid2d'
 
 # it means that you forgot to do
 # source activate.sh in your terminal

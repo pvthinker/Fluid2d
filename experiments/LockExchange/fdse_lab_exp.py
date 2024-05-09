@@ -2,9 +2,9 @@
 Numerical experiment of the gravity current done in the lab
 at FDSE, with Paul Billant
 """
+from fluid2d import Fluid2d
 from param import Param
 from grid import Grid
-from fluid2d import Fluid2d
 import numpy as np
 
 param = Param('default.xml')

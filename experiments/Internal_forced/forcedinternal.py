@@ -1,14 +1,13 @@
+from fluid2d import Fluid2d
 from param import Param
 from grid import Grid
-from fluid2d import Fluid2d
-from numpy import exp, sqrt, pi, cos, sin, where, random, shape, tanh, cumsum, cosh
 import numpy as np
 from restart import Restart
 from island import Island
 
 param = Param('default.xml')
 param.modelname = 'boussinesq'
-param.expname = 'ForcedInternal_0'
+param.expname = 'ForcedInternalWave'
 
 # domain and resolution
 ratio = 1
@@ -100,8 +99,8 @@ model.set_psi_from_vorticity()
 
 
 def vortex(x0, y0, sigma):
-    x = sqrt((xr-param.Lx*x0)**2+(yr-param.Ly*y0)**2)
-    y = 2-2./(1+exp(-x/sigma))
+    x = np.sqrt((xr-param.Lx*x0)**2+(yr-param.Ly*y0)**2)
+    y = 2-2./(1+np.exp(-x/sigma))
     return y
 
 
