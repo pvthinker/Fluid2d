@@ -3,6 +3,9 @@ import os.path as path
 import sys
 import getopt
 
+# Local import
+import ems
+
 
 class Param(object):
     """class to set up the default parameters value of the model
@@ -17,10 +20,16 @@ class Param(object):
 
     """
 
-    def __init__(self, defaultfile):
-        """defaultfile is a sequel, it's no longer used the default file is
-        systematically the defaults.json located in the fluid2d/core
+    def __init__(self, defaultfile=None, ems_file=""):
+        """Load default parameters and optionally experiment parameters.
 
+        The parameter `defaultfile` is no longer used and exists only
+        for backwards compatibility.  The default file is always
+        the file `defaults.json` located in the core-folder of fluid2d.
+
+        The parameter `ems_file` takes optionally the name of an
+        experiment file.  If given, the Experiment Management System
+        (EMS) is activated and the experiment file is parsed.
         """
 
         import grid
@@ -41,6 +50,11 @@ class Param(object):
             self.print_param = True
         else:
             self.print_param = False
+
+        if ems_file:
+            self.ems = ems.EMS(ems_file)
+        else:
+            self.ems = None
 
     def set_parameters(self, namelist):
         avail = {}
@@ -76,6 +90,11 @@ class Param(object):
             self.man(p)
 
     def checkall(self):
+        if self.ems:
+            # Only create a new database entry once, not by every core
+            if self.myrank == 0:
+                self.ems.initialize(self.datadir)
+            self.expname = self.ems.get_expname()
         for p, avail in self.avail.items():
             if getattr(self, p) in avail:
                 # the parameter 'p' is well set
@@ -108,6 +127,36 @@ class Param(object):
             else:
                 missing.append(k)
         return missing
+
+    def get_experiment_parameters(self):
+        """Return the experiment parameters dictionary loaded by the EMS.
+
+        The EMS must be activated in the constructor of `Param` to use
+        this method.  It returns the dictionary of experiment parameters
+        and exits.  It is advised to use, when possible, the method
+        `loop_experiment_parameters` instead.
+        """
+        return self.ems.parameters
+
+    def loop_experiment_parameters(self):
+        """Iterate over the experiment parameters loaded by the EMS.
+
+        In every iteration, this method returns a new dictionary of
+        experiment parameters containing a combination of the values
+        specified in the experiment file.  This experiment file for the
+        EMS must be specified in the constructor of `Param`.  If only
+        one value is given for every parameter in the experiment file,
+        the method `get_experiment_parameters` can be used instead.
+        The ID of the experiment is increased in every iteration.
+        """
+        while self.ems.parameters:
+            yield self.ems.parameters
+            self.ems.setup_next_parameters()
+
+    def finalize(self, fluid2d):
+        """Invoke the finalize method of the EMS if activated."""
+        if self.ems:
+            self.ems.finalize(fluid2d)
 
 
 if __name__ == "__main__":

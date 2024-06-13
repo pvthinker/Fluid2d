@@ -32,6 +32,15 @@ class Plotting(object):
                 # Define a dummy cax to prevent create_fig from failing
                 self.cax = [None, None]
 
+        if param.npx * param.npy > 1 and self.generate_mp4:
+            if self.myrank == 0:
+                print(
+                    'Warning: It is not possible to generate an mp4-file when '
+                    'fluid2d runs on multiple cores.\n'
+                    'The parameter generate_mp4 is automatically changed to False.'
+                )
+            self.generate_mp4 = False
+
         nh = self.nh
         nx = param.nx
         ny = param.ny
@@ -218,9 +227,10 @@ class Plotting(object):
             self.process.stdin.write(string)
 
     def finalize(self):
-        """ do nothing but close the mp4 thread if any"""
+        """Close the mp4 thread if any and the current figure."""
         if self.generate_mp4:
             self.process.communicate()
+        plt.close()
 
     def set_cax(self, z):
         """ set self.cax, the color range"""

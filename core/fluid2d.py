@@ -309,6 +309,7 @@ class Fluid2d(object):
             # check for blow-up
             if self.model.diags['maxspeed'] > 1e3:
                 self.stop = True
+                self.blow_up = True
                 if self.myrank == 0:
                     print()
                     print('max|u| > 1000, blow-up detected, stopping')
