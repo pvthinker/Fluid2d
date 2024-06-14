@@ -12,7 +12,7 @@ class Output(Param):
                            'var_to_save', 'varname_list',
                            'expdir', 'tracer_list',
                            'diag_fluxes',
-                           'freq_his', 'freq_diag', 'list_diag']
+                           'freq_his', 'freq_diag', 'list_diag', 'custom_diag']
         param.copy(self, self.list_param)
 
         self.list_grid = ['nxl', 'nyl', 'nh']
@@ -50,6 +50,8 @@ class Output(Param):
         # prepare the 'diagnostics' file
         if self.list_diag == 'all':
             self.list_diag = diag.keys()
+        if self.custom_diag == 'none':
+            self.custom_diag = {}
 
         self.diagfile = '%s/%s_diag.nc' % (self.expdir, self.expname)
 
@@ -85,7 +87,7 @@ class Output(Param):
         if (t >= self.tnextdiag):
             self.tnextdiag += self.freq_diag
             if self.myrank == 0:
-                self.write_diag(data['diag'], t, kt)
+                self.write_diag(data['his'], data['diag'], t, kt)
 
         if (t >= self.tnexthis):
             self.tnexthis += self.freq_his
@@ -112,16 +114,19 @@ class Output(Param):
             for v in self.list_diag:
                 d = nc.createVariable(v, 'f', ('t',))
                 d.long_name = v
+            for v in self.custom_diag:
+                d = nc.createVariable(v, 'f', ('t',))
+                d.long_name = v
 
         self.kdiag = 0
 
         # set up internal buffer to avoid too frequent disk access
-        self.ndiags = len(self.list_diag)+2
+        self.ndiags = len(self.list_diag) + len(self.custom_diag) + 2
         self.buffersize = 10
         self.buffer = np.zeros((self.buffersize, self.ndiags))
 
 
-    def write_diag(self, diag, t, kt):
+    def write_diag(self, his, diag, t, kt):
 
         # store diag into the buffer
         k = self.kdiag % self.buffersize
@@ -130,6 +135,10 @@ class Output(Param):
         j = 2
         for v in self.list_diag:
             self.buffer[k, j] = diag[v]  # getattr(diag,v)
+            j += 1
+        for v in self.custom_diag:
+            # Call the custom diagnostics function with the current model state
+            self.buffer[k, j] = self.custom_diag[v](his)
             j += 1
         self.kdiag += 1
 
@@ -147,6 +156,9 @@ class Output(Param):
         nc.variables['kt'][k] = self.buffer[:last, 1]
         j = 2
         for v in self.list_diag:
+            nc.variables[v][k] = self.buffer[:last, j]
+            j += 1
+        for v in self.custom_diag:
             nc.variables[v][k] = self.buffer[:last, j]
             j += 1
         nc.close()
